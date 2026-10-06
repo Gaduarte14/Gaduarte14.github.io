@@ -1,9 +1,9 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Mesa de Som - motor de áudio</title>
-<script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/dist/bundle.umd.js"></script>
 </head><body>
 <div id="players" style="position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden"></div>
-<script>
+<script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
 const NS = "com.gaduart.mesa-de-som";
 const players = {};
 let ytReady = false, meta = null;

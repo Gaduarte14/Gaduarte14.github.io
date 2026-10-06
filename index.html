@@ -2,7 +2,6 @@
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mesa de Som</title>
-<script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/dist/bundle.umd.js"></script>
 <style>
 :root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--on:#2f6b5a}
 *{box-sizing:border-box}
@@ -25,7 +24,10 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px s
 </style></head><body>
 <h1>Mesa de Som</h1>
 <div id="app"></div>
-<script>
+<script type="module">
+let OBR;
+try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
+catch (e) { document.getElementById("app").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
 const NS = "com.gaduart.mesa-de-som";
 let lib = { folders: [] }, playing = {}, isGM = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
