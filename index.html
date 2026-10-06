@@ -6,64 +6,95 @@
 :root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--on:#2f6b5a}
 *{box-sizing:border-box}
 body{margin:0;padding:12px;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
-h1{font:600 18px Georgia,serif;margin:0 0 10px}
+h1{font:600 18px Georgia,serif;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+h1 img{width:28px;height:28px}
 button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
-button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
+button:hover{border-color:var(--gold)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
 input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
-.bar{display:flex;gap:6px;margin-bottom:10px}.bar input{flex:1}
-.folder{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--panel)}
-.fh{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font:600 15px Georgia,serif}
+.bar{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.note{color:var(--mute);margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+.fcard{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:8px}
+.fcard:hover{background:var(--panel)}
+.fcard svg{width:52px;height:42px}
+.fname{font-size:12px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cnt{font-size:11px;color:var(--mute)}
+.folderview{border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.fvhead{display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid var(--line)}
+.swatch{width:16px;height:16px;border-radius:50%;flex:none}
+.fvname{font:600 16px Georgia,serif;flex:1}
 .track{display:grid;grid-template-columns:34px 1fr auto;gap:4px 8px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}
 .track.on{background:#1f3a35}
 .play{width:34px;height:34px;padding:0;border-radius:50%}.on .play{background:var(--on);border-color:var(--on)}
 .ctl{grid-column:2/4;display:flex;align-items:center;gap:8px;color:var(--mute);font-size:12px}
 .ctl input[type=range]{flex:1;accent-color:var(--gold)}
-.add{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}.add input{flex:1}
+.add{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line);flex-wrap:wrap}.add input{flex:1}
 .x{background:none;border:none;color:var(--mute);padding:2px 6px}
-.empty,.note{color:var(--mute)}
+.nfform{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:var(--panel)}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}.row:last-child{margin-bottom:0}.row input[type=text]{flex:1}
+input[type=color]{width:38px;height:38px;border:1px solid var(--line);border-radius:50%;padding:0;background:none;cursor:pointer}
+input.light{flex:1;accent-color:var(--gold)}
+.empty{color:var(--mute)}
 </style></head><body>
-<h1>Mesa de Som</h1>
+<h1><img src="icon.png" alt=""> Mesa de Som</h1>
 <div id="app"></div>
+<input type="file" id="fileImport" accept="application/json" style="display:none">
 <script type="module">
 let OBR;
 try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
 catch (e) { document.getElementById("app").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
+
 const NS = "com.gaduart.mesa-de-som";
-let lib = { folders: [] }, playing = {}, isGM = false;
+let lib = { folders: [] }, playing = {}, isGM = false, openFolder = null, showNew = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const vidId = u => { const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/) || u.match(/^([\w-]{11})$/); return m && m[1]; };
 
 OBR.onReady(async () => {
   isGM = (await OBR.player.getRole()) === "GM";
-  load(await OBR.room.getMetadata());
-  OBR.room.onMetadataChange(load);
+  onRemote(await OBR.room.getMetadata());
+  OBR.room.onMetadataChange(onRemote);
   OBR.player.onChange(async () => { isGM = (await OBR.player.getRole()) === "GM"; render(); });
 });
-function load(m) {
+function onRemote(m) {
   lib = m[NS + "/lib"] || { folders: [] };
   playing = (m[NS + "/state"] || {}).playing || {};
+  if (openFolder && !lib.folders.find(f => f.id === openFolder)) openFolder = null;
   render();
 }
 const save = () => OBR.room.setMetadata({ [NS + "/lib"]: lib, [NS + "/state"]: { playing } });
 const find = id => { for (const f of lib.folders) for (const t of f.tracks) if (t.id === id) return t; };
+const folderIcon = c => `<svg viewBox="0 0 24 24" fill="${c}"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" stroke="rgba(0,0,0,.3)"/></svg>`;
 
 function render() {
   const a = document.getElementById("app");
   if (a.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type === "text") return;
   let h = "";
   if (!isGM) h += '<p class="note">Só o mestre controla a música. Você ouve o que ele tocar.</p>';
-  if (isGM) h += '<div class="bar"><input type="text" id="nf" placeholder="Nome da nova pasta"><button data-a="addFolder">Criar pasta</button><button data-a="stopAll">Parar tudo</button></div>';
-  if (!lib.folders.length) h += '<p class="empty">Nenhuma pasta ainda. Crie uma, como "Ambiente" ou "Música de fundo".</p>';
-  for (const f of lib.folders) {
-    h += `<section class="folder"><div class="fh">${esc(f.name)}${isGM ? `<button class="x" data-a="delFolder" data-f="${f.id}" title="Apagar pasta">×</button>` : ""}</div>`;
+  if (isGM) h += '<div class="bar"><button data-a="toggleNew">+ Nova pasta</button><button data-a="stopAll">Parar tudo</button><button data-a="export">Exportar</button><button data-a="import">Importar</button></div>';
+  if (isGM && showNew) h += `<div class="nfform"><div class="row"><input type="text" id="nf" placeholder="Nome da pasta"></div>
+    <div class="row"><input type="color" id="nfc" value="#e0a44a" aria-label="Cor da pasta"><input type="range" class="light" id="nfl" min="25" max="85" value="55" aria-label="Mais escura ou mais clara"></div>
+    <div class="row"><button data-a="createFolder">Criar</button><button data-a="toggleNew">Cancelar</button></div></div>`;
+
+  const f = isGM && openFolder && lib.folders.find(x => x.id === openFolder);
+  if (f) {
+    h += `<div class="folderview"><div class="fvhead"><button data-a="back">← Voltar</button><span class="swatch" style="background:${f.color}"></span><span class="fvname">${esc(f.name)}</span><button class="x" data-a="delFolder" data-f="${f.id}" title="Apagar pasta">×</button></div>`;
+    if (!f.tracks.length) h += '<p class="empty" style="padding:10px;margin:0">Nenhuma faixa ainda.</p>';
     for (const t of f.tracks) {
       const on = !!playing[t.id];
-      h += `<div class="track ${on ? "on" : ""}"><button class="play" ${isGM ? "" : "disabled"} data-a="toggle" data-t="${t.id}" aria-label="${on ? "Parar" : "Tocar"} ${esc(t.title)}">${on ? "■" : "▶"}</button><span>${esc(t.title)}</span>${isGM ? `<button class="x" data-a="delTrack" data-t="${t.id}" title="Remover faixa">×</button>` : "<span></span>"}
-      <div class="ctl"><span>Vol</span><input type="range" min="0" max="100" value="${t.vol}" ${isGM ? "" : "disabled"} data-a="vol" data-t="${t.id}"><label><input type="checkbox" ${t.loop ? "checked" : ""} ${isGM ? "" : "disabled"} data-a="loop" data-t="${t.id}"> repetir</label></div></div>`;
+      h += `<div class="track ${on ? "on" : ""}"><button class="play" data-a="toggle" data-t="${t.id}" aria-label="${on ? "Parar" : "Tocar"} ${esc(t.title)}">${on ? "■" : "▶"}</button><span>${esc(t.title)}</span><button class="x" data-a="delTrack" data-t="${t.id}" title="Remover faixa">×</button>
+      <div class="ctl"><span>Vol</span><input type="range" min="0" max="100" value="${t.vol}" data-a="vol" data-t="${t.id}"><label><input type="checkbox" ${t.loop ? "checked" : ""} data-a="loop" data-t="${t.id}"> repetir</label></div></div>`;
     }
-    if (isGM) h += `<div class="add"><input type="text" data-n="${f.id}" placeholder="Link do YouTube"><input type="text" data-m="${f.id}" placeholder="Nome" style="max-width:110px"><button data-a="addTrack" data-f="${f.id}">Adicionar</button></div>`;
-    h += "</section>";
+    h += `<div class="add"><input type="text" data-n="${f.id}" placeholder="Link do YouTube"><input type="text" data-m="${f.id}" placeholder="Nome" style="max-width:110px"><button data-a="addTrack" data-f="${f.id}">Adicionar</button></div></div>`;
+  } else {
+    if (!lib.folders.length) h += '<p class="empty">Nenhuma pasta ainda. Crie uma, como "Ambiente" ou "Música de fundo".</p>';
+    h += '<div class="grid">';
+    for (const x of lib.folders) {
+      const n = x.tracks.filter(t => playing[t.id]).length;
+      h += `<button class="fcard" data-a="open" data-f="${x.id}">${folderIcon(x.color)}<span class="fname">${esc(x.name)}</span><span class="cnt">${x.tracks.length} faixa${x.tracks.length === 1 ? "" : "s"}${n ? " · " + n + " tocando" : ""}</span></button>`;
+    }
+    h += "</div>";
   }
   a.innerHTML = h;
 }
@@ -71,23 +102,58 @@ function render() {
 document.addEventListener("click", e => {
   const b = e.target.closest("button[data-a]"); if (!b || !isGM) return;
   const { a, f, t } = b.dataset;
-  if (a === "addFolder") { const n = document.getElementById("nf").value.trim(); if (n) lib.folders.push({ id: uid(), name: n, tracks: [] }); }
-  if (a === "delFolder") { lib.folders.find(x => x.id === f).tracks.forEach(x => delete playing[x.id]); lib.folders = lib.folders.filter(x => x.id !== f); }
+  if (a === "open") { openFolder = f; showNew = false; return render(); }
+  if (a === "back") { openFolder = null; return render(); }
+  if (a === "toggleNew") { showNew = !showNew; return render(); }
+  if (a === "export") return doExport();
+  if (a === "import") return document.getElementById("fileImport").click();
+  if (a === "createFolder") {
+    const name = document.getElementById("nf").value.trim(); if (!name) return;
+    lib.folders.push({ id: uid(), name, color: shade(document.getElementById("nfc").value, document.getElementById("nfl").value), tracks: [] });
+    showNew = false;
+  }
+  if (a === "delFolder") { lib.folders.find(x => x.id === f).tracks.forEach(x => delete playing[x.id]); lib.folders = lib.folders.filter(x => x.id !== f); openFolder = null; }
   if (a === "addTrack") {
     const url = document.querySelector(`[data-n="${f}"]`).value.trim(), name = document.querySelector(`[data-m="${f}"]`).value.trim();
     const v = vidId(url); if (!v) return alert("Link do YouTube inválido.");
     lib.folders.find(x => x.id === f).tracks.push({ id: uid(), title: name || "Faixa " + v, vid: v, vol: 60, loop: true });
   }
   if (a === "delTrack") { lib.folders.forEach(x => x.tracks = x.tracks.filter(y => y.id !== t)); delete playing[t]; }
-  if (a === "toggle") { playing[t] ? delete playing[t] : (playing[t] = true); }
+  if (a === "toggle") playing[t] ? delete playing[t] : (playing[t] = true);
   if (a === "stopAll") playing = {};
-  save();
+  save(); render();
 });
 document.addEventListener("change", e => {
-  const i = e.target; if (!isGM || !i.dataset.a) return;
+  const i = e.target;
+  if (i.id === "fileImport") { doImport(i.files[0]); i.value = ""; return; }
+  if (!isGM || !i.dataset.a) return;
   const t = find(i.dataset.t); if (!t) return;
   if (i.dataset.a === "vol") t.vol = +i.value;
   if (i.dataset.a === "loop") t.loop = i.checked;
   save();
 });
+
+function shade(hex, L) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; let h = 0, s = 0;
+  if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+  return `hsl(${Math.round(h * 360)},${Math.round(s * 100)}%,${L}%)`;
+}
+function doExport() {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(lib, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = "mesa-de-som.json"; a.click(); URL.revokeObjectURL(url);
+}
+function doImport(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!d || !Array.isArray(d.folders)) throw new Error("formato inválido");
+      lib = d; playing = {}; openFolder = null; save(); render();
+    } catch (e) { alert("Não consegui ler esse arquivo: " + e.message); }
+  };
+  r.readAsText(file);
+}
 </script></body></html>

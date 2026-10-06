@@ -14,6 +14,10 @@ s.src = "https://www.youtube.com/iframe_api";
 document.head.appendChild(s);
 
 OBR.onReady(async () => {
+  // A biblioteca nasce vazia toda vez que o mestre recarrega a página.
+  if ((await OBR.player.getRole()) === "GM") {
+    await OBR.room.setMetadata({ [NS + "/lib"]: { folders: [] }, [NS + "/state"]: { playing: {} } });
+  }
   meta = await OBR.room.getMetadata();
   sync();
   OBR.room.onMetadataChange(m => { meta = m; sync(); });
