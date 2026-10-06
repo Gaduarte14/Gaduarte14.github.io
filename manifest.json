@@ -1,0 +1,15 @@
+{
+  "name": "Mesa de Som",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Música e ambiente do YouTube em camadas, organizados por pastas.",
+  "icon": "/icon.svg",
+  "background_url": "/background.html",
+  "action": {
+    "title": "Mesa de Som",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "height": 520,
+    "width": 380
+  }
+}

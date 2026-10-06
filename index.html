@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mesa de Som</title>
+<script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/dist/bundle.umd.js"></script>
+<style>
+:root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--on:#2f6b5a}
+*{box-sizing:border-box}
+body{margin:0;padding:12px;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+h1{font:600 18px Georgia,serif;margin:0 0 10px}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
+input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
+.bar{display:flex;gap:6px;margin-bottom:10px}.bar input{flex:1}
+.folder{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--panel)}
+.fh{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;font:600 15px Georgia,serif}
+.track{display:grid;grid-template-columns:34px 1fr auto;gap:4px 8px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}
+.track.on{background:#1f3a35}
+.play{width:34px;height:34px;padding:0;border-radius:50%}.on .play{background:var(--on);border-color:var(--on)}
+.ctl{grid-column:2/4;display:flex;align-items:center;gap:8px;color:var(--mute);font-size:12px}
+.ctl input[type=range]{flex:1;accent-color:var(--gold)}
+.add{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}.add input{flex:1}
+.x{background:none;border:none;color:var(--mute);padding:2px 6px}
+.empty,.note{color:var(--mute)}
+</style></head><body>
+<h1>Mesa de Som</h1>
+<div id="app"></div>
+<script>
+const NS = "com.gaduart.mesa-de-som";
+let lib = { folders: [] }, playing = {}, isGM = false;
+const uid = () => Math.random().toString(36).slice(2, 9);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const vidId = u => { const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/) || u.match(/^([\w-]{11})$/); return m && m[1]; };
+
+OBR.onReady(async () => {
+  isGM = (await OBR.player.getRole()) === "GM";
+  load(await OBR.room.getMetadata());
+  OBR.room.onMetadataChange(load);
+  OBR.player.onChange(async () => { isGM = (await OBR.player.getRole()) === "GM"; render(); });
+});
+function load(m) {
+  lib = m[NS + "/lib"] || { folders: [] };
+  playing = (m[NS + "/state"] || {}).playing || {};
+  render();
+}
+const save = () => OBR.room.setMetadata({ [NS + "/lib"]: lib, [NS + "/state"]: { playing } });
+const find = id => { for (const f of lib.folders) for (const t of f.tracks) if (t.id === id) return t; };
+
+function render() {
+  const a = document.getElementById("app");
+  if (a.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type === "text") return;
+  let h = "";
+  if (!isGM) h += '<p class="note">Só o mestre controla a música. Você ouve o que ele tocar.</p>';
+  if (isGM) h += '<div class="bar"><input type="text" id="nf" placeholder="Nome da nova pasta"><button data-a="addFolder">Criar pasta</button><button data-a="stopAll">Parar tudo</button></div>';
+  if (!lib.folders.length) h += '<p class="empty">Nenhuma pasta ainda. Crie uma, como "Ambiente" ou "Música de fundo".</p>';
+  for (const f of lib.folders) {
+    h += `<section class="folder"><div class="fh">${esc(f.name)}${isGM ? `<button class="x" data-a="delFolder" data-f="${f.id}" title="Apagar pasta">×</button>` : ""}</div>`;
+    for (const t of f.tracks) {
+      const on = !!playing[t.id];
+      h += `<div class="track ${on ? "on" : ""}"><button class="play" ${isGM ? "" : "disabled"} data-a="toggle" data-t="${t.id}" aria-label="${on ? "Parar" : "Tocar"} ${esc(t.title)}">${on ? "■" : "▶"}</button><span>${esc(t.title)}</span>${isGM ? `<button class="x" data-a="delTrack" data-t="${t.id}" title="Remover faixa">×</button>` : "<span></span>"}
+      <div class="ctl"><span>Vol</span><input type="range" min="0" max="100" value="${t.vol}" ${isGM ? "" : "disabled"} data-a="vol" data-t="${t.id}"><label><input type="checkbox" ${t.loop ? "checked" : ""} ${isGM ? "" : "disabled"} data-a="loop" data-t="${t.id}"> repetir</label></div></div>`;
+    }
+    if (isGM) h += `<div class="add"><input type="text" data-n="${f.id}" placeholder="Link do YouTube"><input type="text" data-m="${f.id}" placeholder="Nome" style="max-width:110px"><button data-a="addTrack" data-f="${f.id}">Adicionar</button></div>`;
+    h += "</section>";
+  }
+  a.innerHTML = h;
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]"); if (!b || !isGM) return;
+  const { a, f, t } = b.dataset;
+  if (a === "addFolder") { const n = document.getElementById("nf").value.trim(); if (n) lib.folders.push({ id: uid(), name: n, tracks: [] }); }
+  if (a === "delFolder") { lib.folders.find(x => x.id === f).tracks.forEach(x => delete playing[x.id]); lib.folders = lib.folders.filter(x => x.id !== f); }
+  if (a === "addTrack") {
+    const url = document.querySelector(`[data-n="${f}"]`).value.trim(), name = document.querySelector(`[data-m="${f}"]`).value.trim();
+    const v = vidId(url); if (!v) return alert("Link do YouTube inválido.");
+    lib.folders.find(x => x.id === f).tracks.push({ id: uid(), title: name || "Faixa " + v, vid: v, vol: 60, loop: true });
+  }
+  if (a === "delTrack") { lib.folders.forEach(x => x.tracks = x.tracks.filter(y => y.id !== t)); delete playing[t]; }
+  if (a === "toggle") { playing[t] ? delete playing[t] : (playing[t] = true); }
+  if (a === "stopAll") playing = {};
+  save();
+});
+document.addEventListener("change", e => {
+  const i = e.target; if (!isGM || !i.dataset.a) return;
+  const t = find(i.dataset.t); if (!t) return;
+  if (i.dataset.a === "vol") t.vol = +i.value;
+  if (i.dataset.a === "loop") t.loop = i.checked;
+  save();
+});
+</script></body></html>

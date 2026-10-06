@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mesa de Som - motor de áudio</title>
+<script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/dist/bundle.umd.js"></script>
+</head><body>
+<div id="players" style="position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden"></div>
+<script>
+const NS = "com.gaduart.mesa-de-som";
+const players = {};
+let ytReady = false, meta = null;
+
+window.onYouTubeIframeAPIReady = () => { ytReady = true; sync(); };
+const s = document.createElement("script");
+s.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(s);
+
+OBR.onReady(async () => {
+  meta = await OBR.room.getMetadata();
+  sync();
+  OBR.room.onMetadataChange(m => { meta = m; sync(); });
+});
+
+function sync() {
+  if (!ytReady || !meta) return;
+  const lib = meta[NS + "/lib"] || { folders: [] };
+  const playing = (meta[NS + "/state"] || {}).playing || {};
+  const tracks = {};
+  lib.folders.forEach(f => f.tracks.forEach(t => tracks[t.id] = t));
+
+  for (const id in players) {
+    if (!playing[id] || !tracks[id] || players[id].vid !== tracks[id].vid) {
+      try { players[id].p.destroy(); } catch (e) {}
+      players[id].el.remove();
+      delete players[id];
+    }
+  }
+  for (const id in playing) {
+    const t = tracks[id];
+    if (!t) continue;
+    if (!players[id]) create(id, t);
+    else {
+      players[id].loop = t.loop;
+      try { players[id].p.setVolume(t.vol); } catch (e) {}
+    }
+  }
+}
+
+function create(id, t) {
+  const el = document.createElement("div");
+  document.getElementById("players").appendChild(el);
+  const entry = { vid: t.vid, loop: t.loop, el, p: null };
+  players[id] = entry;
+  entry.p = new YT.Player(el, {
+    width: "1", height: "1", videoId: t.vid,
+    playerVars: { autoplay: 1, controls: 0, playsinline: 1 },
+    events: {
+      onReady: e => { e.target.setVolume(t.vol); e.target.playVideo(); },
+      onStateChange: e => { if (e.data === 0 && entry.loop) e.target.playVideo(); }
+    }
+  });
+}
+</script></body></html>
