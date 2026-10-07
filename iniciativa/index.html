@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Warpath</title>
+<style>
+:root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;padding:12px;gap:8px;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+header{display:flex;align-items:center;gap:8px}
+h1{font:600 18px Georgia,serif;margin:0;display:flex;align-items:center;gap:8px;flex:1}
+h1 img{width:28px;height:28px}
+#rnd{color:var(--gold);font-weight:600}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bar[hidden]{display:none}
+label.chk{font-size:12px;color:var(--mute);display:flex;gap:4px;align-items:center}
+#list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.row{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer}
+.row.cur{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.row.none .nm{color:var(--mute)}
+.row.gone{opacity:.45;text-decoration:line-through}
+.arrow{width:14px;color:var(--gold);flex:none}
+.ini{width:56px;flex:none;text-align:center;font:700 18px Georgia,serif}
+b.ini{display:inline-block}
+.nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.empty{color:var(--mute);margin:auto 0}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
+button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-weight:600}
+button.x{padding:2px 8px;color:var(--mute)}
+input{min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+input[type=checkbox]{accent-color:var(--gold)}
+#warn{color:#e5b87a;font-size:12px;min-height:16px}
+</style></head><body>
+<header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div></header>
+<div class="bar" id="bar" hidden></div>
+<div id="list"></div>
+<div id="warn"></div>
+<script type="module">
+let OBR;
+try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
+catch (e) { document.getElementById("list").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
+
+const SKEY = "com.gaduart.warpath/state";   // estado compartilhado (metadata da sala)
+const IKEY = "com.gaduart.warpath/init";    // iniciativa enviada pela ficha (metadata do jogador)
+const ENGINE = "https://gaduarte14.github.io/dados/engine.js"; // mesmo motor de dados do Rollhaven
+const MAX = 120;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+const clip = (s, n) => String(s ?? "").slice(0, n);
+const defaults = () => ({ active: false, started: false, round: 1, turnId: null, since: 0, entries: [] });
+const tokenName = i => clip((i.name || i.text?.plainText || "").trim() || "Sem nome", 40);
+
+let state = defaults(), players = [], isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
+let eng = null; import(ENGINE).then(m => eng = m).catch(() => {});
+
+function flash(t) { msg = t; render(); clearTimeout(ft); ft = setTimeout(() => { msg = ""; render(); }, 5000); }
+async function save() {
+  try { await OBR.room.setMetadata({ [SKEY]: state }); }
+  catch (e) { flash("Não consegui salvar: " + e.message); }
+}
+
+// Ordem: maior para o menor; quem ainda não tem valor vai para o fim.
+function sortedEntries() {
+  return state.entries.map((e, i) => ({ e, i }))
+    .sort((a, b) => (a.e.init === null) - (b.e.init === null) || (b.e.init - a.e.init) || a.i - b.i)
+    .map(x => x.e);
+}
+const rotation = () => sortedEntries().filter(e => e.init !== null && !e.gone);
+
+// Aplica as iniciativas rolladas na ficha (casando pelo nome do personagem = nome do token).
+function applyRolls() {
+  let changed = false;
+  for (const p of players) {
+    const r = p.metadata?.[IKEY];
+    const total = Number(r?.total);
+    if (!r || !(r.ts > state.since) || !Number.isFinite(total)) continue;
+    const n = norm(r.name);
+    for (const e of state.entries)
+      if (!e.gone && norm(e.name) === n && r.ts > (e.rt || 0)) { e.init = total; e.rt = r.ts; changed = true; }
+  }
+  return changed;
+}
+function orphans() {
+  const out = [];
+  for (const p of players) {
+    const r = p.metadata?.[IKEY];
+    if (!r || !(r.ts > state.since)) continue;
+    const n = norm(r.name);
+    if (!state.entries.some(e => !e.gone && norm(e.name) === n)) out.push(`${clip(r.name, 30)} (${r.total})`);
+  }
+  return out;
+}
+
+async function focus(id) {
+  try {
+    const [b, dpi] = [await OBR.scene.items.getItemBounds([id]), await OBR.scene.grid.getDpi()];
+    const c = b.center, r = dpi * 3;
+    await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
+    if (isGM) await OBR.player.select([id]);
+  } catch (e) {}
+}
+
+async function start() {
+  let items;
+  try { items = await OBR.scene.items.getItems(i => (i.layer === "CHARACTER" || i.layer === "MOUNT") && i.type === "IMAGE" && (incHidden || i.visible)); }
+  catch (e) { flash("Abra uma cena primeiro."); return; }
+  if (!items.length) { flash("Nenhum token nas camadas Personagem/Montaria."); return; }
+  const entries = items.slice(0, MAX).map(i => ({ id: i.id, name: tokenName(i), init: null, rt: 0 }));
+  state = { ...defaults(), active: true, since: state.since, entries };
+  applyRolls();
+  await save(); render();
+  if (items.length > MAX) flash(`Só os primeiros ${MAX} tokens entraram.`);
+}
+async function end() {
+  state = { ...defaults(), since: Date.now() };
+  await save(); render();
+}
+async function step(dir) {
+  const order = rotation();
+  if (!order.length) { flash("Ninguém tem iniciativa ainda."); return; }
+  let idx = order.findIndex(e => e.id === state.turnId);
+  if (!state.started) { state.started = true; idx = 0; }
+  else if (idx === -1) idx = 0;
+  else {
+    idx += dir;
+    if (idx >= order.length) { idx = 0; state.round++; }
+    else if (idx < 0) { if (state.round > 1) { state.round--; idx = order.length - 1; } else idx = 0; }
+  }
+  state.turnId = order[idx].id;
+  await save(); render(); focus(state.turnId);
+}
+async function addSelected() {
+  const sel = (await OBR.player.getSelection()) || [];
+  if (!sel.length) { flash("Selecione tokens no mapa primeiro."); return; }
+  const items = (await OBR.scene.items.getItems(sel)).filter(i => i.type === "IMAGE" && !state.entries.some(e => e.id === i.id));
+  if (!items.length) { flash("Esses tokens já estão na lista."); return; }
+  for (const i of items) if (state.entries.length < MAX) state.entries.push({ id: i.id, name: tokenName(i), init: null, rt: 0 });
+  applyRolls(); await save(); render();
+}
+async function rollEmpty() {
+  if (!eng) { flash("Motor de dados não carregou."); return; }
+  const now = Date.now(); let n = 0;
+  for (const e of state.entries) if (e.init === null && !e.gone) { e.init = eng.rollInput("1d20")[0].results[0].t; e.rt = now; n++; }
+  if (!n) { flash("Todos já têm iniciativa."); return; }
+  await save(); render();
+}
+async function removeEntry(id) {
+  if (state.turnId === id) {
+    const order = rotation(), i = order.findIndex(e => e.id === id);
+    state.turnId = i > 0 ? order[i - 1].id : null;
+  }
+  state.entries = state.entries.filter(e => e.id !== id);
+  await save(); render();
+}
+async function setInit(id, raw) {
+  const e = state.entries.find(x => x.id === id); if (!e) return;
+  const v = String(raw).trim().replace(",", "."), n = Number(v);
+  e.init = v === "" || !Number.isFinite(n) ? null : Math.round(n * 100) / 100;
+  e.rt = Date.now();
+  await save(); render();
+}
+
+function render() {
+  const a = document.activeElement;
+  if (a && a.tagName === "INPUT" && a.closest("#list")) { pending = true; return; }
+  pending = false;
+  $("bar").hidden = !isGM;
+  $("bar").innerHTML = !isGM ? "" : !state.active
+    ? `<button class="on" data-a="start">Iniciar</button><label class="chk"><input type="checkbox" id="hid" ${incHidden ? "checked" : ""}> incluir tokens ocultos</label>`
+    : `<button class="on" data-a="next">${state.started ? "Próximo ▶" : "Começar ▶"}</button><button data-a="prev" title="Voltar um turno">◀</button><button data-a="roll" title="Rola 1d20 para quem está sem valor">🎲 Vazios</button><button data-a="add">+ Selecionados</button><button data-a="end">Encerrar</button>`;
+  $("rnd").textContent = state.active ? (state.started ? `Rodada ${state.round}` : "Preparação") : "";
+  const list = $("list");
+  if (!state.active) {
+    list.innerHTML = `<p class="empty">${isGM ? "Clique em <b>Iniciar</b> para adicionar todos os tokens do mapa. A iniciativa que os jogadores rolarem na ficha entra sozinha." : "Aguardando o mestre iniciar a iniciativa."}</p>`;
+  } else {
+    list.innerHTML = sortedEntries().map(e => {
+      const cur = e.id === state.turnId;
+      const num = isGM
+        ? `<input class="ini" type="text" inputmode="decimal" data-id="${esc(e.id)}" value="${e.init ?? ""}" placeholder="—" aria-label="Iniciativa de ${esc(e.name)}">`
+        : `<b class="ini">${e.init ?? "—"}</b>`;
+      return `<div class="row${cur ? " cur" : ""}${e.gone ? " gone" : ""}${e.init === null ? " none" : ""}" data-id="${esc(e.id)}"><span class="arrow">${cur ? "▶" : ""}</span>${num}<span class="nm">${esc(e.name)}</span>${isGM ? `<button class="x" data-rm="${esc(e.id)}" aria-label="Remover ${esc(e.name)}">✕</button>` : ""}</div>`;
+    }).join("");
+    list.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
+  }
+  const o = isGM && state.active ? orphans() : [];
+  $("warn").textContent = [msg, o.length ? "Sem token com esse nome: " + o.join(", ") : ""].filter(Boolean).join(" · ");
+}
+
+$("bar").addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]"); if (!b) return;
+  const act = b.dataset.a;
+  if (act === "start") start();
+  else if (act === "next") step(1);
+  else if (act === "prev") step(-1);
+  else if (act === "roll") rollEmpty();
+  else if (act === "add") addSelected();
+  else if (act === "end") {
+    if (b.dataset.armed) end();
+    else { b.dataset.armed = "1"; b.textContent = "Confirmar?"; setTimeout(() => { if (b.isConnected) { b.textContent = "Encerrar"; delete b.dataset.armed; } }, 3000); }
+  }
+});
+$("bar").addEventListener("change", e => { if (e.target.id === "hid") incHidden = e.target.checked; });
+$("list").addEventListener("change", e => { if (e.target.matches("input.ini")) setInit(e.target.dataset.id, e.target.value); });
+$("list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input.ini")) e.target.blur(); });
+$("list").addEventListener("focusout", () => setTimeout(() => { if (pending) render(); }, 0));
+$("list").addEventListener("click", e => {
+  const x = e.target.closest("button[data-rm]");
+  if (x) { if (isGM) removeEntry(x.dataset.rm); return; }
+  if (e.target.closest("input")) return;
+  const row = e.target.closest(".row"); if (row) focus(row.dataset.id);
+});
+
+// Mantém nomes dos tokens atualizados e marca os que saíram do mapa.
+function syncItems(items) {
+  if (!isGM || !state.active) return;
+  const byId = new Map(items.map(i => [i.id, i]));
+  let ch = false;
+  for (const e of state.entries) {
+    const it = byId.get(e.id);
+    if (!it) { if (!e.gone) { e.gone = true; ch = true; } continue; }
+    if (e.gone) { delete e.gone; ch = true; }
+    const nm = tokenName(it);
+    if (nm !== e.name) { e.name = nm; ch = true; }
+  }
+  if (ch) { applyRolls(); save(); render(); }
+}
+async function watchItems() {
+  const go = () => { unsub?.(); unsub = OBR.scene.items.onChange(syncItems); };
+  if (await OBR.scene.isReady()) go(); else OBR.scene.onReadyChange(r => { if (r) go(); });
+}
+
+OBR.onReady(async () => {
+  isGM = (await OBR.player.getRole()) === "GM";
+  OBR.player.onChange(p => { isGM = p.role === "GM"; render(); });
+  players = await OBR.party.getPlayers();
+  const meta = await OBR.room.getMetadata();
+  if (meta[SKEY]) state = { ...defaults(), ...meta[SKEY] };
+  // O mestre é a fonte da verdade; jogadores só acompanham.
+  OBR.room.onChange(m => { if (!isGM && m[SKEY]) { state = { ...defaults(), ...m[SKEY] }; render(); } });
+  OBR.party.onChange(async p => { players = p; if (isGM && state.active && applyRolls()) await save(); render(); });
+  if (isGM && state.active && applyRolls()) await save();
+  render();
+  watchItems();
+});
+render();
+</script></body></html>

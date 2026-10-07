@@ -1,0 +1,14 @@
+{
+  "name": "Warpath",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Iniciativa rápida para o mestre: adiciona os tokens do mapa, recebe a iniciativa da ficha e foca no token da vez.",
+  "icon": "/iniciativa/icon.png",
+  "action": {
+    "title": "Warpath",
+    "icon": "/iniciativa/action-icon.svg",
+    "popover": "/iniciativa/index.html",
+    "width": 380,
+    "height": 560
+  }
+}
