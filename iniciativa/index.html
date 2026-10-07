@@ -53,7 +53,7 @@ const clip = (s, n) => String(s ?? "").slice(0, n);
 const defaults = () => ({ active: false, started: false, round: 1, turnId: null, since: 0, entries: [] });
 const tokenName = i => clip((i.name || i.text?.plainText || "").trim() || "Sem nome", 40);
 
-let state = defaults(), players = [], isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
+let state = defaults(), players = [], selfMeta = {}, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
 let eng = null; import(ENGINE).then(m => eng = m).catch(() => {});
 
 function flash(t) { msg = t; render(); clearTimeout(ft); ft = setTimeout(() => { msg = ""; render(); }, 5000); }
@@ -70,11 +70,19 @@ function sortedEntries() {
 }
 const rotation = () => sortedEntries().filter(e => e.init !== null && !e.gone);
 
+// Todas as iniciativas enviadas pelas fichas: dos outros jogadores + a do próprio mestre
+// (o Owlbear não inclui você mesmo na lista de jogadores).
+function rollsPool() {
+  const out = [];
+  for (const p of players) { const r = p.metadata?.[IKEY]; if (r) out.push(r); }
+  const mine = selfMeta?.[IKEY]; if (mine) out.push(mine);
+  return out;
+}
+
 // Aplica as iniciativas rolladas na ficha (casando pelo nome do personagem = nome do token).
 function applyRolls() {
   let changed = false;
-  for (const p of players) {
-    const r = p.metadata?.[IKEY];
+  for (const r of rollsPool()) {
     const total = Number(r?.total);
     if (!r || !(r.ts > state.since) || !Number.isFinite(total)) continue;
     const n = norm(r.name);
@@ -85,8 +93,7 @@ function applyRolls() {
 }
 function orphans() {
   const out = [];
-  for (const p of players) {
-    const r = p.metadata?.[IKEY];
+  for (const r of rollsPool()) {
     if (!r || !(r.ts > state.since)) continue;
     const n = norm(r.name);
     if (!state.entries.some(e => !e.gone && norm(e.name) === n)) out.push(`${clip(r.name, 30)} (${r.total})`);
@@ -186,7 +193,8 @@ function render() {
     list.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
   }
   const o = isGM && state.active ? orphans() : [];
-  $("warn").textContent = [msg, o.length ? "Sem token com esse nome: " + o.join(", ") : ""].filter(Boolean).join(" · ");
+  const got = isGM && state.active ? rollsPool().filter(r => r.ts > state.since).length : 0;
+  $("warn").textContent = [msg, o.length ? "Sem token com esse nome: " + o.join(", ") : "", isGM && state.active ? `Iniciativas recebidas das fichas: ${got}` : ""].filter(Boolean).join(" · ");
 }
 
 $("bar").addEventListener("click", e => {
@@ -234,7 +242,12 @@ async function watchItems() {
 
 OBR.onReady(async () => {
   isGM = (await OBR.player.getRole()) === "GM";
-  OBR.player.onChange(p => { isGM = p.role === "GM"; render(); });
+  selfMeta = await OBR.player.getMetadata();
+  OBR.player.onChange(async p => {
+    isGM = p.role === "GM"; selfMeta = p.metadata || {};
+    if (isGM && state.active && applyRolls()) await save();
+    render();
+  });
   players = await OBR.party.getPlayers();
   const meta = await OBR.room.getMetadata();
   if (meta[SKEY]) state = { ...defaults(), ...meta[SKEY] };
