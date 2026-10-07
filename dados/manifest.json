@@ -6,7 +6,7 @@
   "icon": "/dados/icon.png",
   "background_url": "/dados/background.html",
   "action": {
-    "title": "Bard's Dice",
+    "title": "Rollhaven",
     "icon": "/dados/action-icon.svg",
     "popover": "/dados/index.html",
     "height": 520,
