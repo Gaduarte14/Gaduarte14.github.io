@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Forger</title>
+<style>
+:root{--bg:#1b1d2a;--card:#252839;--line:#3a3f5a;--tx:#e8e8f0;--mut:#9a9db5;--ac:#c9a24d;--rd:#c0504d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px system-ui,sans-serif;padding:8px}
+input,textarea,select{background:#161826;color:var(--tx);border:1px solid var(--line);border-radius:5px;padding:4px 6px;font:inherit;width:100%}
+textarea{resize:vertical;min-height:70px}input[type=checkbox]{width:auto;accent-color:var(--ac)}
+.bar{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;background:var(--bg);padding-bottom:8px;z-index:5}
+button{background:var(--ac);color:#1b1d2a;border:0;border-radius:5px;padding:6px 10px;font-weight:700;cursor:pointer}
+button.alt{background:var(--card);color:var(--tx);border:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
+h3{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ac)}
+.g{display:grid;gap:6px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
+label{display:block;font-size:10px;color:var(--mut);text-transform:uppercase;margin-bottom:2px}
+.ab{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ab div{text-align:center;background:#161826;border:1px solid var(--line);border-radius:8px;padding:6px}
+.ab .m{font-size:22px;font-weight:700;cursor:pointer}.ab input{text-align:center;width:54px}
+.row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:default}
+.row .v{width:28px;text-align:right;font-weight:700;color:var(--ac);cursor:pointer}.row span.n{flex:1}
+.row small{color:var(--mut)}.big{font-size:20px;text-align:center;font-weight:700}
+.atk{display:grid;grid-template-columns:2fr 1fr 2fr auto auto;gap:4px;margin-bottom:4px}
+#toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:var(--ac);color:#1b1d2a;padding:8px 14px;border-radius:8px;font-weight:700;display:none;z-index:9}
+button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.sm{padding:3px 6px;font-size:11px}#ini{cursor:pointer}</style></head><body>
+<div class="bar"><button id="exp">⬇ Exportar</button><button class="alt" id="imp">⬆ Importar</button><button class="alt" id="clr">Limpar</button><button class="alt" id="adv">Vantagem</button><button class="alt" id="dis">Desv.</button>
+<input type="file" id="file" accept=".json" hidden></div>
+
+<div class="card"><div class="g g2">
+<div><label>Personagem</label><input data-k="nome"></div><div><label>Jogador</label><input data-k="jogador"></div>
+<div><label>Classe</label><input data-k="classe"></div><div><label>Nível</label><input data-k="nivel" type="number" min="1" max="20" value="1"></div>
+<div><label>Raça</label><input data-k="raca"></div><div><label>Antecedente</label><input data-k="antec"></div>
+<div><label>Alinhamento</label><input data-k="alin"></div><div><label>XP</label><input data-k="xp" type="number"></div></div></div>
+
+<div class="card"><div class="g g3">
+<div><label>CA</label><input class="big" data-k="ca" type="number" value="10"></div>
+<div><label>Iniciativa</label><div class="big" id="ini">+0</div></div>
+<div><label>Deslocamento</label><input class="big" data-k="desl" value="9m"></div>
+<div><label>PV atual</label><input class="big" data-k="pv" type="number"></div>
+<div><label>PV máx</label><input class="big" data-k="pvmax" type="number"></div>
+<div><label>PV temp</label><input class="big" data-k="pvt" type="number"></div>
+<div><label>Dados de vida</label><input data-k="dv" placeholder="1d8"></div>
+<div><label>Proficiência</label><div class="big" id="pb">+2</div></div>
+<div><label>Perc. passiva</label><div class="big" id="pp">10</div></div></div>
+<div class="g g2" style="margin-top:6px"><div><label>Salvaguarda vs Morte — Sucessos</label>
+<input type="checkbox" data-k="ds1"><input type="checkbox" data-k="ds2"><input type="checkbox" data-k="ds3"></div>
+<div><label>Falhas</label><input type="checkbox" data-k="df1"><input type="checkbox" data-k="df2"><input type="checkbox" data-k="df3"></div></div></div>
+
+<div class="card"><h3>Atributos <small style="color:var(--mut)">(clique no valor para rolar)</small></h3><div class="ab" id="abs"></div></div>
+<div class="card"><h3>Salvaguardas</h3><div id="svs"></div></div>
+<div class="card"><h3>Perícias <small style="color:var(--mut)">(○ prof · ◎ expertise)</small></h3><div id="sks"></div></div>
+
+<div class="card"><h3>Ataques</h3><div id="atks"></div></div>
+<div class="card"><h3>Espaços de magia <small style="color:var(--mut)">(usados / total)</small></h3>
+<div class="g g3" id="slots"></div>
+<div class="g g3" style="margin-top:6px"><div><label>Atributo-chave</label><select data-k="conj"><option value="">—</option><option value="int">INT</option><option value="sab">SAB</option><option value="car">CAR</option></select></div>
+<div><label>CD de magia</label><div class="big" id="cd">—</div></div><div><label>Ataque de magia</label><div class="big" id="am">—</div></div></div></div>
+
+<div class="card"><h3>Magias</h3><textarea data-k="magias" rows="6"></textarea></div>
+<div class="card"><h3>Equipamento</h3><textarea data-k="equip" rows="5"></textarea>
+<div class="g g3" style="margin-top:6px"><div><label>PC</label><input data-k="pc" type="number"></div><div><label>PP</label><input data-k="pp_" type="number"></div><div><label>PO</label><input data-k="po" type="number"></div></div></div>
+<div class="card"><h3>Características e Talentos</h3><textarea data-k="carac" rows="6"></textarea></div>
+<div class="card"><h3>Personalidade</h3><div class="g"><div><label>Traços</label><textarea data-k="tracos"></textarea></div><div><label>Ideais</label><textarea data-k="ideais"></textarea></div><div><label>Vínculos</label><textarea data-k="vinc"></textarea></div><div><label>Defeitos</label><textarea data-k="def"></textarea></div></div></div>
+<div class="card"><h3>Anotações / História</h3><textarea data-k="notas" rows="6"></textarea></div>
+<div id="toast"></div>
+
+<script>
+const AB=[['for','Força'],['des','Destreza'],['con','Constituição'],['int','Inteligência'],['sab','Sabedoria'],['car','Carisma']];
+const SK=[['Acrobacia','des'],['Adestrar Animais','sab'],['Arcanismo','int'],['Atletismo','for'],['Atuação','car'],['Enganação','car'],['Furtividade','des'],['História','int'],['Intimidação','car'],['Intuição','sab'],['Investigação','int'],['Medicina','sab'],['Natureza','int'],['Percepção','sab'],['Persuasão','car'],['Prestidigitação','des'],['Religião','int'],['Sobrevivência','sab']];
+const $=s=>document.querySelector(s),sg=n=>(n>=0?'+':'')+n;
+$('#abs').innerHTML=AB.map(([k,n])=>`<div><label>${n}</label><div class="m" data-roll="${k}" id="m_${k}">+0</div><input type="number" data-k="a_${k}" value="10" min="1" max="30"></div>`).join('');
+$('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}" data-rollsv="${k}">+0</span><span class="n">${n}</span></div>`).join('');
+$('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}" data-rollsk="${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span></div>`).join('');
+$('#atks').innerHTML=[0,1,2,3].map(i=>`<div class="atk"><input data-k="at_n${i}" placeholder="Arma"><input data-k="at_b${i}" placeholder="+0"><input data-k="at_d${i}" placeholder="1d8+3 cortante"><button class="sm" data-atk="${i}">Atq</button><button class="sm" data-dmg="${i}">Dano</button></div>`).join('');
+$('#slots').innerHTML=[1,2,3,4,5,6,7,8,9].map(i=>`<div><label>Nível ${i}</label><div style="display:flex;gap:3px"><input type="number" data-k="su${i}" min="0"><input type="number" data-k="st${i}" min="0"></div></div>`).join('');
+
+const els=()=>[...document.querySelectorAll('[data-k]')];
+const V=k=>document.querySelector(`[data-k="${k}"]`);
+const num=k=>parseInt(V(k).value)||0, ck=k=>V(k).checked;
+const mod=k=>Math.floor((num('a_'+k)-10)/2);
+let pb=2;
+function calc(){
+  pb=2+Math.floor((Math.max(1,num('nivel'))-1)/4);
+  $('#pb').textContent=sg(pb);
+  AB.forEach(([k])=>{$('#m_'+k).textContent=sg(mod(k));$('#sv_'+k).textContent=sg(mod(k)+(ck('sp_'+k)?pb:0))});
+  SK.forEach(([n,a],i)=>{$('#sk_'+i).textContent=sg(mod(a)+(ck('kp_'+i)?pb:0)*(ck('ke_'+i)?2:1))});
+  $('#ini').textContent=sg(mod('des'));
+  $('#pp').textContent=10+parseInt($('#sk_13').textContent);
+  const c=V('conj').value;
+  $('#cd').textContent=c?8+pb+mod(c):'—';$('#am').textContent=c?sg(pb+mod(c)):'—';
+}
+document.addEventListener('input',calc);document.addEventListener('change',calc);
+
+let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3500)}
+const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls';
+let OBR=null,ready=false,eng=null,mode=null;
+import(ENGINE).then(m=>eng=m).catch(()=>{});
+import('https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm').then(m=>{OBR=m.default;OBR.onReady(()=>ready=true)}).catch(()=>{});
+// Rola com o motor do Rollhaven e compartilha no mesmo formato do chat dele
+async function doRoll(text,prefix){
+  let rolls;
+  try{if(!eng)throw new Error('motor do Rollhaven não carregou');rolls=eng.rollInput(text,mode)}catch(e){toast('Erro: '+e.message);return}
+  if(prefix)rolls.forEach(r=>r.label=(prefix+(r.label?' — '+r.label:'')).slice(0,80));
+  const r=rolls[0],res=r.results[0],msg=`${r.label}: ${res.t}`;
+  toast(msg+'  ⟵ '+res.d.replace(/~(-?\d+)~/g,'($1)'));
+  if(!(OBR&&ready))return;
+  try{
+    OBR.notification.show(msg.slice(0,120));
+    const [name,color,meta]=await Promise.all([OBR.player.getName(),OBR.player.getColor(),OBR.player.getMetadata()]);
+    const arr=Array.isArray(meta[KEY])?meta[KEY]:[];
+    arr.push({id:Math.random().toString(36).slice(2,10),ts:Date.now(),name,color,rolls});
+    while(arr.length>10||(arr.length>1&&JSON.stringify(arr).length>7000))arr.shift();
+    await OBR.player.setMetadata({[KEY]:arr});
+  }catch(e){}
+}
+const roll=(label,m)=>doRoll('1d20'+(m?sg(m):''),label);
+document.addEventListener('click',e=>{
+  const t=e.target,d=t.dataset;
+  if(d.roll)roll(AB.find(a=>a[0]==d.roll)[1],mod(d.roll));
+  if(d.rollsv)roll('Salv. '+AB.find(a=>a[0]==d.rollsv)[1],parseInt(t.textContent));
+  if(d.rollsk)roll(SK[d.rollsk][0],parseInt(t.textContent));
+  if(t.id=='ini')roll('Iniciativa',mod('des'));
+  if(d.atk)roll(V('at_n'+d.atk).value||'Ataque',parseInt(V('at_b'+d.atk).value)||0);
+  if(d.dmg){const x=V('at_d'+d.dmg).value.trim();if(x)doRoll(x,(V('at_n'+d.dmg).value||'Arma')+' (dano)')}
+  if(t.id=='adv'||t.id=='dis'){mode=mode==t.id?null:t.id;$('#adv').classList.toggle('on',mode=='adv');$('#dis').classList.toggle('on',mode=='dis')}
+});
+
+$('#exp').onclick=()=>{
+  const d={};els().forEach(e=>d[e.dataset.k]=e.type=='checkbox'?e.checked:e.value);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,dados:d},null,1)],{type:'application/json'}));
+  a.download=(d.nome||'ficha').replace(/\W+/g,'_')+'.json';a.click();toast('Ficha exportada!');
+};
+$('#imp').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const d=JSON.parse(r.result).dados;
+    els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]});
+    calc();toast('Ficha importada!')}catch(x){toast('Arquivo inválido')}};
+  r.readAsText(f);e.target.value='';
+};
+$('#clr').onclick=()=>{if(confirm('Limpar a ficha inteira?'))location.reload()};
+calc();
+</script></body></html>
