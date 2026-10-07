@@ -30,7 +30,7 @@ button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-wei
 input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
 #err{color:#e57a7a;font-size:12px;min-height:16px}
 </style></head><body>
-<h1><img src="/dados/icon.png" alt=""> Rollhaven</h1>
+<h1><img src="/dados/icon.png" alt=""> Rollhaven <button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão" style="margin-left:auto;padding:3px 9px;font-size:16px;line-height:1.2">↻</button></h1>
 <div id="chat"></div>
 <div id="err"></div>
 <div class="quick" id="quick"></div>
@@ -101,6 +101,7 @@ function render() {
 
 $("go").addEventListener("click", () => { const v = $("inp").value; if (v.trim()) { doRoll(v); $("inp").value = ""; } });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("reload").addEventListener("click", () => location.reload()); // o histórico fica na metadata dos jogadores, então nada se perde
 $("quick").addEventListener("click", e => {
   const m = e.target.closest("button[data-m]");
   if (m) { mode = mode === m.dataset.m ? null : m.dataset.m; syncMode(); return; }
