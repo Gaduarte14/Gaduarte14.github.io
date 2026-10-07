@@ -28,11 +28,12 @@ button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid va
 button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
 button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-weight:600}
 button.x{padding:2px 8px;color:var(--mute)}
+#reload{padding:3px 9px;font-size:16px;line-height:1.2}
 input{min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
 input[type=checkbox]{accent-color:var(--gold)}
 #warn{color:#e5b87a;font-size:12px;min-height:16px}
 </style></head><body>
-<header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div></header>
+<header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div><button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão">↻</button></header>
 <div class="bar" id="bar" hidden></div>
 <div id="list"></div>
 <div id="warn"></div>
@@ -212,6 +213,7 @@ $("bar").addEventListener("click", e => {
   }
 });
 $("bar").addEventListener("change", e => { if (e.target.id === "hid") incHidden = e.target.checked; });
+$("reload").addEventListener("click", () => location.reload()); // o estado fica salvo na sala, então nada se perde
 $("list").addEventListener("change", e => { if (e.target.matches("input.ini")) setInit(e.target.dataset.id, e.target.value); });
 $("list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input.ini")) e.target.blur(); });
 $("list").addEventListener("focusout", () => setTimeout(() => { if (pending) render(); }, 0));
