@@ -60,17 +60,7 @@ function syncMode() {
 
 OBR.onReady(async () => {
   me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
-  // junta rolagens gravadas por outras extensões (ex.: Character Forger) no meu próprio metadata
-  const sync = m => {
-    const arr = Array.isArray(m?.[KEY]) ? m[KEY] : []; let ch = false;
-    for (const e of arr) if (e?.id && !mine.some(x => x.id === e.id)) { mine.push(e); ch = true; }
-    if (!ch) return;
-    mine.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-    while (mine.length > 10 || (mine.length > 1 && JSON.stringify(mine).length > 7000)) mine.shift();
-    render();
-  };
-  sync(await OBR.player.getMetadata());
-  OBR.player.onChange(p => { me.name = p.name; me.color = p.color; sync(p.metadata); });
+  OBR.player.onChange(p => { me.name = p.name; me.color = p.color; });
   others = await OBR.party.getPlayers();
   OBR.party.onChange(p => { others = p; render(); });
   render();
