@@ -1,13 +1,13 @@
 {
-  "name": "Mesa de Som",
-  "version": "1.0.0",
+  "name": "Bard's Hall",
+  "version": "1.1.0",
   "manifest_version": 1,
   "description": "Música e ambiente do YouTube em camadas, organizados por pastas.",
   "icon": "/icon.png",
   "background_url": "/background.html",
   "action": {
-    "title": "Mesa de Som",
-    "icon": "/icon.png",
+    "title": "Bard's Hall",
+    "icon": "/action-icon.svg",
     "popover": "/index.html",
     "height": 520,
     "width": 380
