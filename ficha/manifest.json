@@ -1,11 +1,12 @@
 {
   "name": "Character Forger",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "manifest_version": 1,
   "description": "Ficha de personagem de D&D 5e para jogadores. Não salva: use exportar/importar.",
+  "icon": "/ficha/icon.png",
   "action": {
     "title": "Character Forger",
-    "icon": "/ficha/action-icon.png",
+    "icon": "/ficha/action-icon.svg",
     "popover": "/ficha/index.html",
     "width": 460,
     "height": 720

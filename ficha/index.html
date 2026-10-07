@@ -34,7 +34,7 @@ button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.s
 
 <div class="card"><div class="g g3">
 <div><label>CA</label><input class="big" data-k="ca" type="number" value="10"></div>
-<div><label>Iniciativa</label><div class="big" id="ini">+0</div></div>
+<div><label>Iniciativa (clique p/ rolar)</label><div class="big" id="ini">+0</div><input data-k="ini_b" type="number" placeholder="bônus extra" title="Bônus extra de iniciativa (talentos, itens...)"></div>
 <div><label>Deslocamento</label><input class="big" data-k="desl" value="9m"></div>
 <div><label>PV atual</label><input class="big" data-k="pv" type="number"></div>
 <div><label>PV máx</label><input class="big" data-k="pvmax" type="number"></div>
@@ -46,7 +46,7 @@ button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.s
 <input type="checkbox" data-k="ds1"><input type="checkbox" data-k="ds2"><input type="checkbox" data-k="ds3"></div>
 <div><label>Falhas</label><input type="checkbox" data-k="df1"><input type="checkbox" data-k="df2"><input type="checkbox" data-k="df3"></div></div></div>
 
-<div class="card"><h3>Atributos <small style="color:var(--mut)">(clique no valor para rolar)</small></h3><div class="ab" id="abs"></div></div>
+<div class="card"><h3>Atributos <small style="color:var(--mut)">(clique no modificador para rolar)</small></h3><div class="ab" id="abs"></div></div>
 <div class="card"><h3>Salvaguardas</h3><div id="svs"></div></div>
 <div class="card"><h3>Perícias <small style="color:var(--mut)">(○ prof · ◎ expertise)</small></h3><div id="sks"></div></div>
 
@@ -69,8 +69,8 @@ const AB=[['for','Força'],['des','Destreza'],['con','Constituição'],['int','I
 const SK=[['Acrobacia','des'],['Adestrar Animais','sab'],['Arcanismo','int'],['Atletismo','for'],['Atuação','car'],['Enganação','car'],['Furtividade','des'],['História','int'],['Intimidação','car'],['Intuição','sab'],['Investigação','int'],['Medicina','sab'],['Natureza','int'],['Percepção','sab'],['Persuasão','car'],['Prestidigitação','des'],['Religião','int'],['Sobrevivência','sab']];
 const $=s=>document.querySelector(s),sg=n=>(n>=0?'+':'')+n;
 $('#abs').innerHTML=AB.map(([k,n])=>`<div><label>${n}</label><div class="m" data-roll="${k}" id="m_${k}">+0</div><input type="number" data-k="a_${k}" value="10" min="1" max="30"></div>`).join('');
-$('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}" data-rollsv="${k}">+0</span><span class="n">${n}</span></div>`).join('');
-$('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}" data-rollsk="${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span></div>`).join('');
+$('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}">+0</span><span class="n">${n}</span><button class="sm" data-rsv="${k}">🎲 Rolar</button></div>`).join('');
+$('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span><button class="sm" data-rsk="${i}">🎲 Rolar</button></div>`).join('');
 $('#atks').innerHTML=[0,1,2,3].map(i=>`<div class="atk"><input data-k="at_n${i}" placeholder="Arma"><input data-k="at_b${i}" placeholder="+0"><input data-k="at_d${i}" placeholder="1d8+3 cortante"><button class="sm" data-atk="${i}">Atq</button><button class="sm" data-dmg="${i}">Dano</button></div>`).join('');
 $('#slots').innerHTML=[1,2,3,4,5,6,7,8,9].map(i=>`<div><label>Nível ${i}</label><div style="display:flex;gap:3px"><input type="number" data-k="su${i}" min="0"><input type="number" data-k="st${i}" min="0"></div></div>`).join('');
 
@@ -84,7 +84,7 @@ function calc(){
   $('#pb').textContent=sg(pb);
   AB.forEach(([k])=>{$('#m_'+k).textContent=sg(mod(k));$('#sv_'+k).textContent=sg(mod(k)+(ck('sp_'+k)?pb:0))});
   SK.forEach(([n,a],i)=>{$('#sk_'+i).textContent=sg(mod(a)+(ck('kp_'+i)?pb:0)*(ck('ke_'+i)?2:1))});
-  $('#ini').textContent=sg(mod('des'));
+  $('#ini').textContent=sg(mod('des')+num('ini_b'));
   $('#pp').textContent=10+parseInt($('#sk_13').textContent);
   const c=V('conj').value;
   $('#cd').textContent=c?8+pb+mod(c):'—';$('#am').textContent=c?sg(pb+mod(c)):'—';
@@ -117,9 +117,9 @@ const roll=(label,m)=>doRoll('1d20'+(m?sg(m):''),label);
 document.addEventListener('click',e=>{
   const t=e.target,d=t.dataset;
   if(d.roll)roll(AB.find(a=>a[0]==d.roll)[1],mod(d.roll));
-  if(d.rollsv)roll('Salv. '+AB.find(a=>a[0]==d.rollsv)[1],parseInt(t.textContent));
-  if(d.rollsk)roll(SK[d.rollsk][0],parseInt(t.textContent));
-  if(t.id=='ini')roll('Iniciativa',mod('des'));
+  if(d.rsv)roll('Salv. '+AB.find(a=>a[0]==d.rsv)[1],parseInt($('#sv_'+d.rsv).textContent));
+  if(d.rsk)roll(SK[d.rsk][0],parseInt($('#sk_'+d.rsk).textContent));
+  if(t.id=='ini')roll('Iniciativa',parseInt(t.textContent));
   if(d.atk)roll(V('at_n'+d.atk).value||'Ataque',parseInt(V('at_b'+d.atk).value)||0);
   if(d.dmg){const x=V('at_d'+d.dmg).value.trim();if(x)doRoll(x,(V('at_n'+d.dmg).value||'Arma')+' (dano)')}
   if(t.id=='adv'||t.id=='dis'){mode=mode==t.id?null:t.id;$('#adv').classList.toggle('on',mode=='adv');$('#dis').classList.toggle('on',mode=='dis')}
