@@ -172,7 +172,8 @@ async function setInit(id, raw) {
 
 function render() {
   const a = document.activeElement;
-  if (a && a.tagName === "INPUT" && a.closest("#list")) { pending = true; return; }
+  // só adia a atualização se o mestre estiver no meio da digitação de um valor
+  if (a && a.tagName === "INPUT" && a.closest("#list") && a.value !== a.defaultValue) { pending = true; return; }
   pending = false;
   $("bar").hidden = !isGM;
   $("bar").innerHTML = !isGM ? "" : !state.active
@@ -240,6 +241,24 @@ async function watchItems() {
   if (await OBR.scene.isReady()) go(); else OBR.scene.onReadyChange(r => { if (r) go(); });
 }
 
+// Garantia: confere os dados a cada 2s, caso o aviso ao vivo do Owlbear não chegue.
+let poolSig = "", lastRemote = "";
+async function poll() {
+  try {
+    if (isGM) {
+      players = await OBR.party.getPlayers();
+      selfMeta = await OBR.player.getMetadata();
+      const sig = JSON.stringify(rollsPool());
+      let changed = false;
+      if (state.active && applyRolls()) { changed = true; await save(); }
+      if (changed || sig !== poolSig) { poolSig = sig; render(); }
+    } else {
+      const s = (await OBR.room.getMetadata())[SKEY], j = JSON.stringify(s ?? null);
+      if (s && j !== lastRemote) { lastRemote = j; state = { ...defaults(), ...s }; render(); }
+    }
+  } catch (e) {}
+}
+
 OBR.onReady(async () => {
   isGM = (await OBR.player.getRole()) === "GM";
   selfMeta = await OBR.player.getMetadata();
@@ -257,6 +276,7 @@ OBR.onReady(async () => {
   if (isGM && state.active && applyRolls()) await save();
   render();
   watchItems();
+  setInterval(poll, 2000);
 });
 render();
 </script></body></html>
