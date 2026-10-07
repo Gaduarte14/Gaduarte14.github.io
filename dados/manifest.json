@@ -1,0 +1,15 @@
+{
+  "name": "Bard's Dice",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Rolador de dados no estilo do bot Rollem, com chat de rolagens recentes.",
+  "icon": "/icon.png",
+  "background_url": "/dados/background.html",
+  "action": {
+    "title": "Bard's Dice",
+    "icon": "/dados/action-icon.svg",
+    "popover": "/dados/index.html",
+    "height": 520,
+    "width": 380
+  }
+}

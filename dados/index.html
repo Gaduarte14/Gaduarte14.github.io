@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bard's Dice</title>
+<style>
+:root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;padding:12px;gap:8px;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+h1{font:600 18px Georgia,serif;margin:0;display:flex;align-items:center;gap:8px}
+h1 img{width:28px;height:28px}
+#chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px}
+.msg{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.who{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mute);margin-bottom:4px}
+.who b{color:var(--ink)} .who time{margin-left:auto}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.lbl{color:var(--gold);font-weight:600}
+.res{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.res b{font:700 20px Georgia,serif;min-width:28px}
+.det{color:var(--mute);font-size:13px;word-break:break-word}
+.det s{opacity:.5}
+.fm{font-size:11px;color:var(--mute);margin-top:2px}
+.roll+.roll{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.empty{color:var(--mute);margin:auto 0}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
+.send{display:flex;gap:6px}
+input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+#err{color:#e57a7a;font-size:12px;min-height:16px}
+</style></head><body>
+<h1><img src="/icon.png" alt=""> Bard's Dice</h1>
+<div id="chat"></div>
+<div id="err"></div>
+<div class="quick" id="quick"></div>
+<div class="send"><input id="inp" type="text" placeholder="2d20kh1+5 ataque" autocomplete="off"><button id="go">Rolar</button></div>
+<script type="module">
+import { rollInput } from "./engine.js";
+let OBR;
+try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
+catch (e) { document.getElementById("chat").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
+
+const KEY = "com.gaduart.bards-dice/rolls";
+let mine = [], others = [], me = { name: "Jogador", color: "#e0a44a" };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const safeColor = c => /^#[0-9a-f]{3,8}$/i.test(c || "") ? c : "#9c97b5";
+
+$("quick").innerHTML = ["d4","d6","d8","d10","d12","d20","d%"].map(d => `<button data-r="${d}">${d}</button>`).join("")
+  + '<button data-r="2d20kh1">Vantagem</button><button data-r="2d20kl1">Desvantagem</button>';
+
+OBR.onReady(async () => {
+  me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
+  OBR.player.onChange(p => { me.name = p.name; me.color = p.color; });
+  others = await OBR.party.getPlayers();
+  OBR.party.onChange(p => { others = p; render(); });
+  render();
+});
+
+async function doRoll(text) {
+  $("err").textContent = "";
+  let rolls;
+  try { rolls = rollInput(text); } catch (e) { $("err").textContent = "Não entendi: " + e.message; return; }
+  mine.push({ id: Math.random().toString(36).slice(2, 10), ts: Date.now(), name: me.name, color: me.color, rolls });
+  while (mine.length > 10 || (mine.length > 1 && JSON.stringify(mine).length > 7000)) mine.shift();
+  render();
+  try { await OBR.player.setMetadata({ [KEY]: mine }); } catch (e) { $("err").textContent = "Não consegui compartilhar a rolagem."; }
+}
+
+function render() {
+  const all = [...mine];
+  for (const p of others) if (Array.isArray(p.metadata?.[KEY])) all.push(...p.metadata[KEY]);
+  all.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const list = all.slice(-40);
+  const chat = $("chat");
+  if (!list.length) { chat.innerHTML = '<p class="empty">Digite uma rolagem, como <b>2d20kh1+5 ataque</b>, <b>6#4d6d1</b> ou <b>[d20+5 espada] e [2d6 fogo]</b>, ou use os botões.</p>'; return; }
+  chat.innerHTML = list.map(e => {
+    const t = new Date(e.ts || 0).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const rolls = (Array.isArray(e.rolls) ? e.rolls : []).map(r => `<div class="roll">${r.label ? `<div class="lbl">${esc(r.label)}</div>` : ""}${(Array.isArray(r.results) ? r.results : []).map(x =>
+      `<div class="res"><b>${esc(x.t)}</b><span class="det">⟵ ${esc(x.d).replace(/~(-?\d+)~/g, "<s>$1</s>")}</span></div>`).join("")}<div class="fm">${esc(r.formula)}</div></div>`).join("");
+    return `<div class="msg"><div class="who"><span class="dot" style="background:${safeColor(e.color)}"></span><b>${esc(e.name)}</b><time>${t}</time></div>${rolls}</div>`;
+  }).join("");
+  chat.scrollTop = chat.scrollHeight;
+}
+
+$("go").addEventListener("click", () => { const v = $("inp").value; if (v.trim()) { doRoll(v); $("inp").value = ""; } });
+$("inp").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("quick").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (b) doRoll(b.dataset.r); });
+</script></body></html>

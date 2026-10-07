@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Bard's Dice - avisos</title></head><body>
+<script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+const KEY = "com.gaduart.bards-dice/rolls";
+const seen = new Set();
+const entries = p => Array.isArray(p.metadata?.[KEY]) ? p.metadata[KEY] : [];
+
+OBR.onReady(async () => {
+  (await OBR.party.getPlayers()).forEach(p => entries(p).forEach(e => seen.add(e.id)));
+  OBR.party.onChange(players => players.forEach(p => entries(p).forEach(e => {
+    if (!e || seen.has(e.id)) return;
+    seen.add(e.id);
+    const r = e.rolls?.[0], res = r?.results?.[0];
+    if (!res) return;
+    OBR.notification.show(`${p.name}: ${res.t}${r.label ? " — " + r.label : ""}`.slice(0, 120));
+  })));
+});
+</script></body></html>
