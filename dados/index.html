@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bard's Dice</title>
+<title>Rollhaven</title>
 <style>
 :root{--bg:#1c1a2b;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a}
 *{box-sizing:border-box}
@@ -25,11 +25,12 @@ h1 img{width:28px;height:28px}
 .quick{display:flex;gap:6px;flex-wrap:wrap}
 button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
 button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
+button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-weight:600}
 .send{display:flex;gap:6px}
 input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
 #err{color:#e57a7a;font-size:12px;min-height:16px}
 </style></head><body>
-<h1><img src="/icon.png" alt=""> Bard's Dice</h1>
+<h1><img src="/dados/icon.png" alt=""> Rollhaven</h1>
 <div id="chat"></div>
 <div id="err"></div>
 <div class="quick" id="quick"></div>
@@ -47,7 +48,15 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const safeColor = c => /^#[0-9a-f]{3,8}$/i.test(c || "") ? c : "#9c97b5";
 
 $("quick").innerHTML = ["d4","d6","d8","d10","d12","d20","d%"].map(d => `<button data-r="${d}">${d}</button>`).join("")
-  + '<button data-r="2d20kh1">Vantagem</button><button data-r="2d20kl1">Desvantagem</button>';
+  + '<button data-m="adv" aria-pressed="false">Vantagem</button><button data-m="dis" aria-pressed="false">Desvantagem</button>';
+
+let mode = null; // null | "adv" | "dis"
+function syncMode() {
+  document.querySelectorAll("#quick button[data-m]").forEach(b => {
+    const on = b.dataset.m === mode;
+    b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+  });
+}
 
 OBR.onReady(async () => {
   me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
@@ -60,7 +69,7 @@ OBR.onReady(async () => {
 async function doRoll(text) {
   $("err").textContent = "";
   let rolls;
-  try { rolls = rollInput(text); } catch (e) { $("err").textContent = "Não entendi: " + e.message; return; }
+  try { rolls = rollInput(text, mode); } catch (e) { $("err").textContent = "Não entendi: " + e.message; return; }
   mine.push({ id: Math.random().toString(36).slice(2, 10), ts: Date.now(), name: me.name, color: me.color, rolls });
   while (mine.length > 10 || (mine.length > 1 && JSON.stringify(mine).length > 7000)) mine.shift();
   render();
@@ -85,5 +94,9 @@ function render() {
 
 $("go").addEventListener("click", () => { const v = $("inp").value; if (v.trim()) { doRoll(v); $("inp").value = ""; } });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
-$("quick").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (b) doRoll(b.dataset.r); });
+$("quick").addEventListener("click", e => {
+  const m = e.target.closest("button[data-m]");
+  if (m) { mode = mode === m.dataset.m ? null : m.dataset.m; syncMode(); return; }
+  const b = e.target.closest("button[data-r]"); if (b) doRoll(b.dataset.r);
+});
 </script></body></html>

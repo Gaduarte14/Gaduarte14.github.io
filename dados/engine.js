@@ -3,8 +3,9 @@ const rnd = n => globalThis.crypto
   ? 1 + (globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % n)
   : 1 + Math.floor(Math.random() * n);
 
-function parseExpr(src) {
-  let i = 0, diceN = 0;
+// mode: null | "adv" | "dis". Vale para cada d20 único da fórmula (ex.: 1d20+20 vira 2d20, fica o maior/menor + modificador).
+function parseExpr(src, mode) {
+  let i = 0, diceN = 0, applied = false;
   const skip = () => { while (src[i] === " ") i++; };
   const num = () => { const m = /^\d+(?:\.\d+)?/.exec(src.slice(i)); if (!m) return null; i += m[0].length; return +m[0]; };
 
@@ -15,9 +16,16 @@ function parseExpr(src) {
     else { sides = num(); if (sides === null) throw new Error("dado inválido"); }
     if (!Number.isInteger(n) || n < 1) throw new Error("quantidade de dados inválida");
     if (!Number.isInteger(sides) || sides < 2 || sides > 100000) throw new Error("o dado precisa ter 2 ou mais lados");
+    const useMode = !!mode && n === 1 && sides === 20 && !fudge;
+    if (useMode) n = 2;
     diceN += n;
     if (diceN > 100) throw new Error("máximo de 100 dados por rolagem");
     const rolls = Array.from({ length: n }, () => ({ v: fudge ? rnd(3) - 2 : rnd(sides), k: true }));
+    if (useMode) {
+      applied = true;
+      const drop = mode === "adv" ? (rolls[0].v >= rolls[1].v ? rolls[1] : rolls[0]) : (rolls[0].v <= rolls[1].v ? rolls[1] : rolls[0]);
+      drop.k = false;
+    }
     for (;;) {
       const m = /^(kh|kl|dh|dl|k|d|!|r)(\d+)?/i.exec(src.slice(i));
       if (!m) break;
@@ -80,28 +88,30 @@ function parseExpr(src) {
     }
   }
   const r = expr();
-  return { t: r.t, d: r.d, end: i };
+  return { t: r.t, d: r.d, end: i, applied };
 }
 
-function rollOne(text) {
+function rollOne(text, mode) {
   let src = text.trim().replace(/^(?:\/roll|\/r|roll|&|r(?=[\sd\d(]))\s*/i, "");
   let count = 1;
   const rep = /^(\d{1,2})#\s*/.exec(src);
   if (rep) { count = Math.max(1, Math.min(+rep[1], 20)); src = src.slice(rep[0].length); }
-  const results = []; let end = 0;
+  const results = []; let end = 0, applied = false;
   for (let n = 0; n < count; n++) {
-    const p = parseExpr(src);
+    const p = parseExpr(src, mode);
     if (!Number.isFinite(p.t)) throw new Error("resultado inválido");
     results.push({ t: Math.round(p.t * 100) / 100, d: p.d.slice(0, 600) });
     end = p.end;
+    applied = applied || p.applied;
   }
-  return { label: src.slice(end).trim().slice(0, 80), formula: src.slice(0, end).trim().slice(0, 80), results };
+  const tag = applied ? (mode === "adv" ? " (vantagem)" : " (desvantagem)") : "";
+  return { label: src.slice(end).trim().slice(0, 80), formula: (src.slice(0, end).trim() + tag).slice(0, 80), results };
 }
 
 // Aceita "2d6+3 fogo", "6#4d6d1", "r6+6" e rolagens no meio do texto: "ataco [d20+5 espada] e causo [2d6 fogo]"
-export function rollInput(text) {
+export function rollInput(text, mode = null) {
   const t = text.trim();
   if (!t) throw new Error("digite uma rolagem");
   const br = [...t.matchAll(/\[([^\]]+)\]/g)];
-  return br.length ? br.slice(0, 10).map(m => rollOne(m[1])) : [rollOne(t)];
+  return br.length ? br.slice(0, 10).map(m => rollOne(m[1], mode)) : [rollOne(t, mode)];
 }
