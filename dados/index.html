@@ -60,7 +60,12 @@ function syncMode() {
 
 OBR.onReady(async () => {
   me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
-  OBR.player.onChange(p => { me.name = p.name; me.color = p.color; });
+  // As rolagens do próprio jogador (inclusive as feitas na ficha) ficam na metadata dele: lê ao abrir e acompanha mudanças.
+  const m0 = await OBR.player.getMetadata(); if (Array.isArray(m0[KEY])) mine = m0[KEY];
+  OBR.player.onChange(p => {
+    me.name = p.name; me.color = p.color;
+    if (Array.isArray(p.metadata?.[KEY])) { mine = p.metadata[KEY]; render(); }
+  });
   others = await OBR.party.getPlayers();
   OBR.party.onChange(p => { others = p; render(); });
   render();
@@ -70,6 +75,8 @@ async function doRoll(text) {
   $("err").textContent = "";
   let rolls;
   try { rolls = rollInput(text, mode); } catch (e) { $("err").textContent = "Não entendi: " + e.message; return; }
+  // Relê a metadata antes de somar, para não apagar rolagens que a ficha acabou de gravar.
+  try { const meta = await OBR.player.getMetadata(); if (Array.isArray(meta[KEY])) mine = meta[KEY]; } catch (e) {}
   mine.push({ id: Math.random().toString(36).slice(2, 10), ts: Date.now(), name: me.name, color: me.color, rolls });
   while (mine.length > 10 || (mine.length > 1 && JSON.stringify(mine).length > 7000)) mine.shift();
   render();
