@@ -19,7 +19,13 @@ button{background:var(--ac);color:#1b1d2a;border:0;border-radius:5px;padding:6px
 button.alt{background:var(--card);color:var(--tx);border:1px solid var(--line)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
 h3{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ac)}
-.g{display:grid;gap:6px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
+.g{display:grid;gap:6px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
+.sl{display:grid;gap:4px;padding:6px 0;border-top:1px solid var(--line)}.sl:first-child{border-top:0;padding-top:0}
+.slh{display:flex;justify-content:space-between;align-items:center;gap:6px}.slh b{color:var(--ac)}
+.ln{display:flex;align-items:center;gap:6px}
+input[type=checkbox].dot{-webkit-appearance:none;appearance:none;width:16px;height:16px;padding:0;margin:0;flex:none;border:2px solid var(--ac);border-radius:50%;background:transparent;cursor:pointer}
+input[type=checkbox].dot:checked{background:var(--ac)}
+.slh span{display:flex;align-items:center;gap:4px}.slh label{display:inline;margin:0}.slh input{width:54px}
 label{display:block;font-size:10px;color:var(--mut);text-transform:uppercase;margin-bottom:2px}
 .ab{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .ab div{text-align:center;background:#161826;border:1px solid var(--line);border-radius:8px;padding:6px}
@@ -59,15 +65,19 @@ button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.s
 <div class="card"><h3>Perícias <small style="color:var(--mut)">(○ prof · ◎ expertise)</small></h3><div id="sks"></div></div>
 
 <div class="card"><h3>Ataques</h3><div id="atks"></div></div>
-<div class="card"><h3>Espaços de magia <small style="color:var(--mut)">(usados / total)</small></h3>
-<div class="g g3" id="slots"></div>
-<div class="g g3" style="margin-top:6px"><div><label>Atributo-chave</label><select data-k="conj"><option value="">—</option><option value="int">INT</option><option value="sab">SAB</option><option value="car">CAR</option></select></div>
+<div class="card"><h3>Conjuração</h3><div class="g g3"><div><label>Atributo-chave</label><select data-k="conj"><option value="">—</option><option value="int">INT</option><option value="sab">SAB</option><option value="car">CAR</option></select></div>
 <div><label>CD de magia</label><div class="big" id="cd">—</div></div><div><label>Ataque de magia</label><div class="big" id="am">—</div></div></div></div>
 
-<div class="card"><h3>Magias</h3><textarea data-k="magias" rows="6"></textarea></div>
+<div class="card"><h3>Truques</h3><div class="g" id="cant"></div></div>
+<div class="card"><h3>Espaços de magia e magias <small style="color:var(--mut)">(usados / total)</small></h3><div id="slots"></div></div>
+
 <div class="card"><h3>Equipamento</h3><textarea data-k="equip" rows="5"></textarea>
-<div class="g g3" style="margin-top:6px"><div><label>PC</label><input data-k="pc" type="number"></div><div><label>PP</label><input data-k="pp_" type="number"></div><div><label>PO</label><input data-k="po" type="number"></div></div></div>
-<div class="card"><h3>Características e Talentos</h3><textarea data-k="carac" rows="6"></textarea></div>
+<div class="g g4" style="margin-top:6px"><div><label>PC</label><input data-k="pc" type="number"></div><div><label>PP</label><input data-k="pp_" type="number"></div><div><label>PO</label><input data-k="po" type="number"></div><div><label>PL</label><input data-k="pl" type="number"></div></div></div>
+<div class="card"><h3>Habilidades de Classe e Subclasse</h3><textarea data-k="hab_classe" rows="6"></textarea></div>
+<div class="card"><h3>Talentos</h3><textarea data-k="talentos" rows="4"></textarea></div>
+<div class="card"><h3>Raça</h3><textarea data-k="carac_raca" rows="5"></textarea></div>
+<div class="card"><h3>Antecedente</h3><textarea data-k="carac_antec" rows="5"></textarea></div>
+<div class="card"><h3>Outras Características</h3><textarea data-k="carac" rows="4"></textarea></div>
 <div class="card"><h3>Personalidade</h3><div class="g"><div><label>Traços</label><textarea data-k="tracos"></textarea></div><div><label>Ideais</label><textarea data-k="ideais"></textarea></div><div><label>Vínculos</label><textarea data-k="vinc"></textarea></div><div><label>Defeitos</label><textarea data-k="def"></textarea></div></div></div>
 <div class="card"><h3>Anotações / História</h3><textarea data-k="notas" rows="6"></textarea></div>
 <div id="toast"></div>
@@ -80,7 +90,9 @@ $('#abs').innerHTML=AB.map(([k,n])=>`<div><label>${n}</label><div class="m" data
 $('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}">+0</span><span class="n">${n}</span><button class="sm" data-rsv="${k}">🎲 Rolar</button></div>`).join('');
 $('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span><button class="sm" data-rsk="${i}">🎲 Rolar</button></div>`).join('');
 $('#atks').innerHTML=[0,1,2,3].map(i=>`<div class="atk"><input data-k="at_n${i}" placeholder="Arma"><input data-k="at_b${i}" placeholder="+0"><input data-k="at_d${i}" placeholder="1d8+3 cortante"><button class="sm" data-atk="${i}">Atq</button><button class="sm" data-dmg="${i}">Dano</button></div>`).join('');
-$('#slots').innerHTML=[1,2,3,4,5,6,7,8,9].map(i=>`<div><label>Nível ${i}</label><div style="display:flex;gap:3px"><input type="number" data-k="su${i}" min="0"><input type="number" data-k="st${i}" min="0"></div></div>`).join('');
+const SLN=Array(9).fill(10); // 10 linhas de magia por nível
+$('#slots').innerHTML=SLN.map((n,idx)=>{const i=idx+1;return `<div class="sl"><div class="slh"><b>Nível ${i}</b><span><label>Usados</label><input type="number" data-k="su${i}" min="0"><label>Total</label><input type="number" data-k="st${i}" min="0"></span></div>${Array.from({length:n},(_,j)=>`<div class="ln"><input type="checkbox" class="dot" data-k="mp${i}_${j}" title="Preparada"><input data-k="mg${i}_${j}" placeholder="Magia"></div>`).join('')}</div>`}).join('');
+$('#cant').innerHTML=Array.from({length:10},(_,j)=>`<div class="ln"><input type="checkbox" class="dot" data-k="tp${j}" title="Preparado"><input data-k="tr${j}" placeholder="Truque"></div>`).join('');
 
 const els=()=>[...document.querySelectorAll('[data-k]')];
 const V=k=>document.querySelector(`[data-k="${k}"]`);
