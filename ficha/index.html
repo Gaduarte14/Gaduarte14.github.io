@@ -93,7 +93,7 @@ function calc(){
 document.addEventListener('input',calc);document.addEventListener('change',calc);
 
 let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3500)}
-const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls';
+const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls',IKEY='com.gaduart.warpath/init';
 const SDKS=['https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm','https://esm.sh/@owlbear-rodeo/sdk@3'];
 let OBR=null,ready=false,eng=null,mode=null,readyRes;
 const readyP=new Promise(r=>readyRes=r);
@@ -112,18 +112,19 @@ const setStatus=(t,ok)=>{const s=$('#st');s.textContent=t;s.style.color=ok?'#7fc
   if(!ready)setStatus('● Sem conexão com o Owlbear',false);
 })();
 // Rola com o motor do Rollhaven e compartilha no mesmo formato do chat dele
-async function doRoll(text,prefix){
+async function doRoll(text,prefix,isInit){
   let rolls;
   try{if(!eng)await engP;if(!eng)throw new Error('motor de dados não carregou');rolls=eng.rollInput(text,mode)}catch(e){toast('Erro: '+e.message);return}
   if(prefix)rolls.forEach(r=>r.label=(prefix+(r.label?' — '+r.label:'')).slice(0,80));
   const r=rolls[0],res=r.results[0],msg=`${r.label}: ${res.t}`;
-  toast(msg+'  ⟵ '+res.d.replace(/~(-?\d+)~/g,'($1)'));
-  share(rolls,msg,Date.now());
+  const cn=(V('nome').value||'').trim();
+  toast(msg+'  ⟵ '+res.d.replace(/~(-?\d+)~/g,'($1)')+(isInit&&!cn?'  —  ⚠ preencha o nome do personagem para o Warpath':''));
+  share(rolls,msg,Date.now(),isInit&&cn?{name:cn.slice(0,60),total:res.t}:null);
 }
 // Fila: as rolagens são enviadas uma por vez, e esperam a conexão se ela ainda não estiver pronta.
 let q=Promise.resolve();
-const share=(rolls,msg,ts)=>(q=q.then(()=>send(rolls,msg,ts)).catch(()=>{}));
-async function send(rolls,msg,ts){
+const share=(rolls,msg,ts,init)=>(q=q.then(()=>send(rolls,msg,ts,init)).catch(()=>{}));
+async function send(rolls,msg,ts,init){
   if(!ready){
     setStatus('● Conectando… envio quando conectar',false);
     await Promise.race([readyP,new Promise(r=>setTimeout(r,30000))]);
@@ -135,16 +136,17 @@ async function send(rolls,msg,ts){
     const arr=Array.isArray(meta[KEY])?meta[KEY]:[];
     arr.push({id:Math.random().toString(36).slice(2,10),ts,name,color,rolls});
     while(arr.length>10||(arr.length>1&&JSON.stringify(arr).length>7000))arr.shift();
-    await OBR.player.setMetadata({[KEY]:arr});
+    // Iniciativa: o Warpath lê esta chave e casa o nome do personagem com o nome do token.
+    await OBR.player.setMetadata(init?{[KEY]:arr,[IKEY]:{name:init.name,total:init.total,ts}}:{[KEY]:arr});
   }catch(e){toast('Rolou, mas não consegui compartilhar: '+((e&&e.message)||'erro'))}
 }
-const roll=(label,m)=>doRoll('1d20'+(m?sg(m):''),label);
+const roll=(label,m,isInit)=>doRoll('1d20'+(m?sg(m):''),label,isInit);
 document.addEventListener('click',e=>{
   const t=e.target,d=t.dataset;
   if(d.roll)roll(AB.find(a=>a[0]==d.roll)[1],mod(d.roll));
   if(d.rsv)roll('Salv. '+AB.find(a=>a[0]==d.rsv)[1],parseInt($('#sv_'+d.rsv).textContent));
   if(d.rsk)roll(SK[d.rsk][0],parseInt($('#sk_'+d.rsk).textContent));
-  if(t.id=='ini')roll('Iniciativa',parseInt(t.textContent));
+  if(t.id=='ini')roll('Iniciativa',parseInt(t.textContent),true);
   if(d.atk)roll(V('at_n'+d.atk).value||'Ataque',parseInt(V('at_b'+d.atk).value)||0);
   if(d.dmg){const x=V('at_d'+d.dmg).value.trim();if(x)doRoll(x,(V('at_n'+d.dmg).value||'Arma')+' (dano)')}
   if(t.id=='adv'||t.id=='dis'){mode=mode==t.id?null:t.id;$('#adv').classList.toggle('on',mode=='adv');$('#dis').classList.toggle('on',mode=='dis')}
