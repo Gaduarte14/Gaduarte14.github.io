@@ -269,24 +269,36 @@ async function poll() {
   } catch (e) {}
 }
 
+// Qualquer erro inesperado aparece na tela em vez de ficar escondido.
+addEventListener("unhandledrejection", e => flash("Erro: " + (e.reason?.message || e.reason)));
+
 OBR.onReady(async () => {
   isGM = (await OBR.player.getRole()) === "GM";
-  selfMeta = await OBR.player.getMetadata();
-  OBR.player.onChange(async p => {
-    isGM = p.role === "GM"; selfMeta = p.metadata || {};
-    if (isGM && state.active && applyRolls()) await save();
-    render();
-  });
-  players = await OBR.party.getPlayers();
-  const meta = await OBR.room.getMetadata();
-  if (meta[SKEY]) state = { ...defaults(), ...meta[SKEY] };
+  try { selfMeta = await OBR.player.getMetadata(); } catch (e) {}
+  try { players = await OBR.party.getPlayers(); } catch (e) {}
+  try {
+    const meta = await OBR.room.getMetadata();
+    if (meta[SKEY]) { lastRemote = JSON.stringify(meta[SKEY]); state = { ...defaults(), ...meta[SKEY] }; }
+  } catch (e) {}
+  // Cada assinatura é independente: se uma falhar, as outras continuam funcionando.
+  try {
+    OBR.player.onChange(async p => {
+      isGM = p.role === "GM"; selfMeta = p.metadata || {};
+      if (isGM && state.active && applyRolls()) await save();
+      render();
+    });
+  } catch (e) {}
   // O mestre é a fonte da verdade; jogadores só acompanham.
-  OBR.room.onChange(m => { if (!isGM && m[SKEY]) { state = { ...defaults(), ...m[SKEY] }; render(); } });
-  OBR.party.onChange(async p => { players = p; if (isGM && state.active && applyRolls()) await save(); render(); });
-  if (isGM && state.active && applyRolls()) await save();
+  try {
+    OBR.room.onMetadataChange(m => {
+      if (!isGM && m[SKEY]) { lastRemote = JSON.stringify(m[SKEY]); state = { ...defaults(), ...m[SKEY] }; render(); }
+    });
+  } catch (e) {}
+  try { OBR.party.onChange(async p => { players = p; if (isGM && state.active && applyRolls()) await save(); render(); }); } catch (e) {}
+  setInterval(poll, 2000); // garantia caso algum aviso ao vivo não chegue
+  try { if (isGM && state.active && applyRolls()) await save(); } catch (e) {}
   render();
-  watchItems();
-  setInterval(poll, 2000);
+  watchItems().catch(() => {});
 });
 render();
 </script></body></html>
