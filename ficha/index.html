@@ -2,6 +2,13 @@
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Character Forger</title>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm">
+<script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+window.__sdk = OBR;
+OBR.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); });
+</script>
+
 <style>
 :root{--bg:#1b1d2a;--card:#252839;--line:#3a3f5a;--tx:#e8e8f0;--mut:#9a9db5;--ac:#c9a24d;--rd:#c0504d}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px system-ui,sans-serif;padding:8px}
@@ -94,23 +101,28 @@ document.addEventListener('input',calc);document.addEventListener('change',calc)
 
 let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3500)}
 const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls',IKEY='com.gaduart.warpath/init';
-const SDKS=['https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm','https://esm.sh/@owlbear-rodeo/sdk@3'];
 let OBR=null,ready=false,eng=null,mode=null,readyRes;
 const readyP=new Promise(r=>readyRes=r);
 const engP=import(ENGINE).then(m=>(eng=m)).catch(()=>null);
 const setStatus=(t,ok)=>{const s=$('#st');s.textContent=t;s.style.color=ok?'#7fc98f':'var(--mut)'};
-// Conecta ao Owlbear. Se ele não responder em 8s, cria uma instância nova do SDK
-// (sem recarregar a página, para não perder a ficha preenchida).
-(async()=>{
-  for(let n=0;!ready&&n<8;n++){
-    try{
-      const o=(await import(SDKS[n%2]+(n>1?'#t'+n:''))).default;
-      o.onReady(()=>{if(ready)return;ready=true;OBR=o;readyRes();setStatus('● Conectado ao Owlbear',true)});
-    }catch(e){continue}
-    await Promise.race([readyP,new Promise(r=>setTimeout(r,8000))]);
-  }
-  if(!ready)setStatus('● Sem conexão com o Owlbear',false);
-})();
+function onSdkReady(){if(ready)return;ready=true;OBR=window.__sdk;readyRes();setStatus('● Conectado ao Owlbear',true);try{sessionStorage.removeItem('fg-tries')}catch(e){}}
+if(window.__sdkReady)onSdkReady();else addEventListener('sdkready',onSdkReady);
+// Se o SDK principal não baixar em 6s, tenta o link reserva.
+setTimeout(async()=>{if(window.__sdk||ready)return;try{const o=(await import('https://esm.sh/@owlbear-rodeo/sdk@3')).default;window.__sdk=o;o.onReady(()=>{window.__sdkReady=true;dispatchEvent(new Event('sdkready'))})}catch(e){}},6000);
+// Mostra o que está acontecendo.
+setTimeout(()=>{if(!ready)setStatus(window.__sdk?'● SDK carregou; aguardando o Owlbear…':'● Baixando o SDK do Owlbear…',false)},3000);
+// Se o Owlbear não responder em 12s, recarrega a ficha (até 2 vezes) guardando o que você preencheu
+// só durante o recarregamento, e restaurando logo depois.
+const fgTries=(()=>{try{return +sessionStorage.getItem('fg-tries')||0}catch(e){return 0}})();
+const fgData=()=>{const d={};els().forEach(e=>d[e.dataset.k]=e.type=='checkbox'?e.checked:e.value);return d};
+setTimeout(()=>{
+  if(ready)return;
+  if(fgTries<2){try{sessionStorage.setItem('fg-recover',JSON.stringify(fgData()));sessionStorage.setItem('fg-tries',fgTries+1)}catch(e){}location.reload();return}
+  setStatus(window.__sdk?'● O Owlbear não respondeu.':'● Não consegui baixar o SDK (rede).',false);
+  const b=document.createElement('button');b.className='alt sm';b.textContent='Tentar de novo';
+  b.onclick=()=>{try{sessionStorage.setItem('fg-recover',JSON.stringify(fgData()));sessionStorage.removeItem('fg-tries')}catch(e){}location.reload()};
+  $('#st').after(b);
+},12000);
 // Rola com o motor do Rollhaven e compartilha no mesmo formato do chat dele
 async function doRoll(text,prefix,isInit){
   let rolls;
@@ -167,5 +179,6 @@ $('#file').onchange=e=>{
   r.readAsText(f);e.target.value='';
 };
 $('#clr').onclick=()=>{if(confirm('Limpar a ficha inteira?'))location.reload()};
+try{const rc=sessionStorage.getItem('fg-recover');if(rc){sessionStorage.removeItem('fg-recover');const d=JSON.parse(rc);els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]})}}catch(e){}
 calc();
 </script></body></html>
