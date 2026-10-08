@@ -37,21 +37,13 @@ input[type=checkbox]{accent-color:var(--gold)}
 </style></head><body>
 <header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div><button id="compact" title="Modo compacto: libera o mapa" aria-label="Modo compacto">−</button><button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão">↻</button></header>
 <div id="now" hidden></div>
-<label class="chk" id="followL" hidden><input type="checkbox" id="follow" checked> seguir a câmera do combate</label>
 <div class="bar" id="bar" hidden></div>
 <div id="list"></div>
 <div id="warn"></div>
 <script type="module">
-let OBR, sdkErr;
-for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
-  try { OBR = (await import(u)).default; break; } catch (e) { sdkErr = e; }
-}
-if (!OBR) { document.getElementById("list").textContent = "Erro ao carregar o SDK do Owlbear: " + (sdkErr && sdkErr.message); throw sdkErr; }
-const wpTries = (() => { try { return +sessionStorage.getItem("wp-tries") || 0; } catch (e) { return 0; } })();
-const dog = setTimeout(() => {
-  if (wpTries < 2) { try { sessionStorage.setItem("wp-tries", wpTries + 1); } catch (e) {} location.reload(); return; }
-  document.getElementById("list").textContent = "O Owlbear não respondeu. Toque no ↻ para tentar de novo.";
-}, 12000);
+let OBR;
+try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
+catch (e) { document.getElementById("list").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
 
 const SKEY = "com.gaduart.warpath/state";   // estado compartilhado (metadata da sala)
 const IKEY = "com.gaduart.warpath/init";    // iniciativa enviada pela ficha (metadata do jogador)
@@ -65,7 +57,7 @@ const clip = (s, n) => String(s ?? "").slice(0, n);
 const defaults = () => ({ active: false, started: false, round: 1, turnId: null, since: 0, entries: [] });
 const tokenName = i => clip((i.name || i.text?.plainText || "").trim() || "Sem nome", 40);
 
-let connected = false, state = defaults(), players = [], selfMeta = {}, compact = false, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
+let state = defaults(), players = [], selfMeta = {}, compact = false, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
 let eng = null; import(ENGINE).then(m => eng = m).catch(() => {});
 
 function flash(t) { msg = t; render(); clearTimeout(ft); ft = setTimeout(() => { msg = ""; render(); }, 5000); }
@@ -197,7 +189,6 @@ function render() {
   if (a && a.tagName === "INPUT" && a.closest("#list") && a.value !== a.defaultValue) { pending = true; return; }
   pending = false;
   $("bar").hidden = !isGM;
-  $("followL").hidden = isGM || !connected;
   $("bar").innerHTML = !isGM ? "" : !state.active
     ? `<button class="on" data-a="start">Iniciar</button><label class="chk"><input type="checkbox" id="hid" ${incHidden ? "checked" : ""}> incluir tokens ocultos</label>`
     : `<button class="on" data-a="next">${state.started ? "Próximo ▶" : "Começar ▶"}</button><button data-a="prev" title="Voltar um turno">◀</button><button data-a="roll" title="Rola 1d20 para quem está sem valor">🎲 Vazios</button><button data-a="add">+ Selecionados</button><button data-a="end">Encerrar</button>`;
@@ -210,7 +201,7 @@ function render() {
   }
   const list = $("list");
   if (!state.active) {
-    list.innerHTML = `<p class="empty">${!connected ? "Conectando ao Owlbear…" : isGM ? "Clique em <b>Iniciar</b> para adicionar todos os tokens do mapa. A iniciativa que os jogadores rolarem na ficha entra sozinha." : "Aguardando o mestre iniciar a iniciativa."}</p>`;
+    list.innerHTML = `<p class="empty">${isGM ? "Clique em <b>Iniciar</b> para adicionar todos os tokens do mapa. A iniciativa que os jogadores rolarem na ficha entra sozinha." : "Aguardando o mestre iniciar a iniciativa."}</p>`;
   } else {
     list.innerHTML = sortedEntries().map(e => {
       const cur = e.id === state.turnId;
@@ -246,7 +237,6 @@ $("compact").addEventListener("click", async () => {
   try { await OBR.action.setHeight(compact ? 230 : 560); } catch (e) { flash("Não consegui redimensionar: " + (e?.message || e)); }
   render();
 });
-$("follow").addEventListener("change", e => { try { localStorage.setItem("wp-follow", e.target.checked ? "1" : "0"); } catch (x) {} });
 $("reload").addEventListener("click", () => location.reload()); // o estado fica salvo na sala, então nada se perde
 $("list").addEventListener("change", e => { if (e.target.matches("input.ini")) setInit(e.target.dataset.id, e.target.value); });
 $("list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input.ini")) e.target.blur(); });
@@ -299,8 +289,6 @@ async function poll() {
 addEventListener("unhandledrejection", e => flash("Erro: " + (e.reason?.message || e.reason)));
 
 OBR.onReady(async () => {
-  connected = true; clearTimeout(dog); try { sessionStorage.removeItem("wp-tries"); } catch (e) {}
-  try { $("follow").checked = localStorage.getItem("wp-follow") !== "0"; } catch (e) {}
   isGM = (await OBR.player.getRole()) === "GM";
   try { selfMeta = await OBR.player.getMetadata(); } catch (e) {}
   try { players = await OBR.party.getPlayers(); } catch (e) {}

@@ -1,10 +1,9 @@
 {
   "name": "Warpath",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "manifest_version": 1,
-  "description": "Iniciativa rápida para o mestre: adiciona os tokens do mapa, recebe a iniciativa da ficha e foca a câmera de todos no token da vez.",
+  "description": "Iniciativa rápida para o mestre: adiciona os tokens do mapa, recebe a iniciativa da ficha e foca no token da vez.",
   "icon": "/iniciativa/icon.png",
-  "background_url": "/iniciativa/background.html",
   "action": {
     "title": "Warpath",
     "icon": "/iniciativa/action-icon.svg",
