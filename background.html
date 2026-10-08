@@ -3,7 +3,10 @@
 </head><body>
 <div id="players" style="position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden"></div>
 <script type="module">
-import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+let OBR;
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) {}
+}
 const NS = "com.gaduart.mesa-de-som";
 const players = {};
 let ytReady = false, meta = null;
