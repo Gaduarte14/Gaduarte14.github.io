@@ -47,7 +47,14 @@ for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "http
 }
 const showMsg = t => { document.getElementById("app").textContent = t; };
 if (!OBR) { showMsg("Erro ao carregar o SDK do Owlbear: " + (sdkErr && sdkErr.message)); throw sdkErr; }
-const dog = setTimeout(() => showMsg("O Owlbear não respondeu. Feche e abra o painel, ou recarregue a página."), 10000);
+const tries = (() => { try { return +sessionStorage.getItem("bh-tries") || 0; } catch { return 0; } })();
+const dog = setTimeout(() => {
+  if (tries < 2) { try { sessionStorage.setItem("bh-tries", tries + 1); } catch {} location.reload(); return; }
+  showMsg("O Owlbear não respondeu no celular. ");
+  const b = document.createElement("button"); b.textContent = "Tentar de novo";
+  b.onclick = () => { try { sessionStorage.removeItem("bh-tries"); } catch {} location.reload(); };
+  document.getElementById("app").append(b);
+}, 12000);
 
 const NS = "com.gaduart.mesa-de-som";
 let lib = { folders: [] }, playing = {}, isGM = false, openFolder = null, showNew = false;
@@ -61,7 +68,7 @@ OBR.onReady(async () => {
     onRemote(await OBR.room.getMetadata());
     OBR.room.onMetadataChange(onRemote);
     OBR.player.onChange(async () => { isGM = (await OBR.player.getRole()) === "GM"; render(); });
-    clearTimeout(dog);
+    clearTimeout(dog); try { sessionStorage.removeItem("bh-tries"); } catch {}
   } catch (e) { showMsg("Erro ao iniciar: " + e.message); }
 });
 function onRemote(m) {
