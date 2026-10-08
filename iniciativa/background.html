@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Warpath - câmera dos jogadores</title></head><body>
+<script type="module">
+let OBR, sdkErr;
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) { sdkErr = e; }
+}
+if (!OBR) throw sdkErr;
+// Aqui recarregar é seguro (nada fica guardado nesta página).
+const tries = (() => { try { return +sessionStorage.getItem("wp-bg-tries") || 0; } catch (e) { return 0; } })();
+const dog = setTimeout(() => {
+  if (tries < 3) { try { sessionStorage.setItem("wp-bg-tries", tries + 1); } catch (e) {} location.reload(); }
+}, 15000);
+
+const SKEY = "com.gaduart.warpath/state";
+let last = null;
+const follows = () => { try { return localStorage.getItem("wp-follow") !== "0"; } catch (e) { return true; } };
+
+async function focus(id) {
+  if (!(await OBR.scene.isReady())) return;
+  let b;
+  try { b = await OBR.scene.items.getItemBounds([id]); }
+  catch (e) {
+    const [it] = await OBR.scene.items.getItems([id]);
+    if (!it) return;
+    b = { width: 0, height: 0, center: it.position };
+  }
+  const dpi = (await OBR.scene.grid.getDpi()) || 150, c = b.center, r = Math.max(dpi * 3, b.width, b.height);
+  await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
+}
+async function handle(s) {
+  if (!s || !s.active || !s.started || !s.turnId) { last = null; return; }
+  if (s.turnId === last) return;
+  last = s.turnId;
+  if (!follows()) return;
+  try { await focus(s.turnId); } catch (e) {}
+}
+
+OBR.onReady(async () => {
+  clearTimeout(dog); try { sessionStorage.removeItem("wp-bg-tries"); } catch (e) {}
+  if ((await OBR.player.getRole()) === "GM") return; // o mestre já foca pelo próprio painel
+  const cur = (await OBR.room.getMetadata())[SKEY];
+  last = cur && cur.active && cur.started ? cur.turnId : null; // ao entrar, não mexe a câmera
+  OBR.room.onMetadataChange(m => handle(m[SKEY]));
+  setInterval(async () => { try { handle((await OBR.room.getMetadata())[SKEY]); } catch (e) {} }, 3000);
+});
+</script></body></html>
