@@ -103,12 +103,20 @@ function orphans() {
 }
 
 async function focus(id) {
+  // 1) câmera: tenta os limites do token; se falhar, usa a posição dele
   try {
-    const [b, dpi] = [await OBR.scene.items.getItemBounds([id]), await OBR.scene.grid.getDpi()];
-    const c = b.center, r = dpi * 3;
+    let b;
+    try { b = await OBR.scene.items.getItemBounds([id]); }
+    catch (e) {
+      const [it] = await OBR.scene.items.getItems([id]);
+      if (!it) throw new Error("token não está mais no mapa");
+      b = { min: it.position, max: it.position, width: 0, height: 0, center: it.position };
+    }
+    const dpi = (await OBR.scene.grid.getDpi()) || 150, c = b.center, r = Math.max(dpi * 3, b.width, b.height);
     await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
-    if (isGM) await OBR.player.select([id]);
-  } catch (e) {}
+  } catch (e) { if (isGM) flash("Não consegui focar a câmera: " + (e?.message || e)); }
+  // 2) seleção: independente da câmera, para o token da vez sempre ficar selecionado
+  try { if (isGM) await OBR.player.select([id]); } catch (e) {}
 }
 
 async function start() {
