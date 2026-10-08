@@ -28,12 +28,15 @@ button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid va
 button:hover{border-color:var(--gold)} button:focus-visible,input:focus-visible{outline:2px solid var(--gold)}
 button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-weight:600}
 button.x{padding:2px 8px;color:var(--mute)}
-#reload{padding:3px 9px;font-size:16px;line-height:1.2}
+#reload,#compact{padding:3px 9px;font-size:16px;line-height:1.2}
+#now{color:var(--gold);font-weight:600;overflow-wrap:anywhere}
+[hidden]{display:none!important}
 input{min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
 input[type=checkbox]{accent-color:var(--gold)}
 #warn{color:#e5b87a;font-size:12px;min-height:16px}
 </style></head><body>
-<header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div><button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão">↻</button></header>
+<header><h1><img src="/iniciativa/icon.png" alt=""> Warpath</h1><div id="rnd"></div><button id="compact" title="Modo compacto: libera o mapa" aria-label="Modo compacto">−</button><button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão">↻</button></header>
+<div id="now" hidden></div>
 <div class="bar" id="bar" hidden></div>
 <div id="list"></div>
 <div id="warn"></div>
@@ -54,7 +57,7 @@ const clip = (s, n) => String(s ?? "").slice(0, n);
 const defaults = () => ({ active: false, started: false, round: 1, turnId: null, since: 0, entries: [] });
 const tokenName = i => clip((i.name || i.text?.plainText || "").trim() || "Sem nome", 40);
 
-let state = defaults(), players = [], selfMeta = {}, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
+let state = defaults(), players = [], selfMeta = {}, compact = false, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
 let eng = null; import(ENGINE).then(m => eng = m).catch(() => {});
 
 function flash(t) { msg = t; render(); clearTimeout(ft); ft = setTimeout(() => { msg = ""; render(); }, 5000); }
@@ -114,6 +117,7 @@ async function focus(id) {
     }
     const dpi = (await OBR.scene.grid.getDpi()) || 150, c = b.center, r = Math.max(dpi * 3, b.width, b.height);
     await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
+    if (isGM) flash("Foco: " + (state.entries.find(e => e.id === id)?.name ?? "token"));
   } catch (e) { if (isGM) flash("Não consegui focar a câmera: " + (e?.message || e)); }
   // 2) seleção: independente da câmera, para o token da vez sempre ficar selecionado
   try { if (isGM) await OBR.player.select([id]); } catch (e) {}
@@ -189,6 +193,12 @@ function render() {
     ? `<button class="on" data-a="start">Iniciar</button><label class="chk"><input type="checkbox" id="hid" ${incHidden ? "checked" : ""}> incluir tokens ocultos</label>`
     : `<button class="on" data-a="next">${state.started ? "Próximo ▶" : "Começar ▶"}</button><button data-a="prev" title="Voltar um turno">◀</button><button data-a="roll" title="Rola 1d20 para quem está sem valor">🎲 Vazios</button><button data-a="add">+ Selecionados</button><button data-a="end">Encerrar</button>`;
   $("rnd").textContent = state.active ? (state.started ? `Rodada ${state.round}` : "Preparação") : "";
+  // Modo compacto: some a lista e fica só o personagem da vez + controles
+  $("list").hidden = compact; $("now").hidden = !compact;
+  if (compact) {
+    const cur = state.entries.find(e => e.id === state.turnId);
+    $("now").textContent = !state.active ? "Sem combate" : cur ? `▶ ${cur.name}${cur.init !== null ? " (" + cur.init + ")" : ""}` : "Preparação";
+  }
   const list = $("list");
   if (!state.active) {
     list.innerHTML = `<p class="empty">${isGM ? "Clique em <b>Iniciar</b> para adicionar todos os tokens do mapa. A iniciativa que os jogadores rolarem na ficha entra sozinha." : "Aguardando o mestre iniciar a iniciativa."}</p>`;
@@ -221,6 +231,12 @@ $("bar").addEventListener("click", e => {
   }
 });
 $("bar").addEventListener("change", e => { if (e.target.id === "hid") incHidden = e.target.checked; });
+$("compact").addEventListener("click", async () => {
+  compact = !compact;
+  $("compact").textContent = compact ? "+" : "−";
+  try { await OBR.action.setHeight(compact ? 230 : 560); } catch (e) { flash("Não consegui redimensionar: " + (e?.message || e)); }
+  render();
+});
 $("reload").addEventListener("click", () => location.reload()); // o estado fica salvo na sala, então nada se perde
 $("list").addEventListener("change", e => { if (e.target.matches("input.ini")) setInit(e.target.dataset.id, e.target.value); });
 $("list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input.ini")) e.target.blur(); });
