@@ -30,16 +30,29 @@ button.on{border-color:var(--gold);background:var(--gold);color:#1c1a2b;font-wei
 input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
 #err{color:#e57a7a;font-size:12px;min-height:16px}
 </style></head><body>
-<h1><img src="/dados/icon.png" alt=""> Rollhaven <button id="reload" title="Reiniciar a extensão" aria-label="Reiniciar a extensão" style="margin-left:auto;padding:3px 9px;font-size:16px;line-height:1.2">↻</button></h1>
-<div id="chat"></div>
+<h1><img src="/dados/icon.png" alt=""> Rollhaven</h1>
+<div id="chat">Conectando ao Owlbear…</div>
 <div id="err"></div>
 <div class="quick" id="quick"></div>
 <div class="send"><input id="inp" type="text" placeholder="2d20kh1+5 ataque" autocomplete="off"><button id="go">Rolar</button></div>
 <script type="module">
 import { rollInput } from "./engine.js";
-let OBR;
-try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
-catch (e) { document.getElementById("chat").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
+let OBR, sdkErr;
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) { sdkErr = e; }
+}
+const showMsg = t => { document.getElementById("chat").textContent = t; };
+if (!OBR) { showMsg("Erro ao carregar o SDK do Owlbear: " + (sdkErr && sdkErr.message)); throw sdkErr; }
+let isReady = false, resolveReady;
+const ready = new Promise(r => (resolveReady = r));
+const tries = (() => { try { return +sessionStorage.getItem("bd-tries") || 0; } catch { return 0; } })();
+const dog = setTimeout(() => {
+  if (tries < 2) { try { sessionStorage.setItem("bd-tries", tries + 1); } catch {} location.reload(); return; }
+  showMsg("O Owlbear não respondeu no celular. ");
+  const b = document.createElement("button"); b.textContent = "Tentar de novo";
+  b.onclick = () => { try { sessionStorage.removeItem("bd-tries"); } catch {} location.reload(); };
+  document.getElementById("chat").append(b);
+}, 12000);
 
 const KEY = "com.gaduart.bards-dice/rolls";
 let mine = [], others = [], me = { name: "Jogador", color: "#e0a44a" };
@@ -59,22 +72,32 @@ function syncMode() {
 }
 
 OBR.onReady(async () => {
-  me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
-  // As rolagens do próprio jogador (inclusive as feitas na ficha) ficam na metadata dele: lê ao abrir e acompanha mudanças.
-  const m0 = await OBR.player.getMetadata(); if (Array.isArray(m0[KEY])) mine = m0[KEY];
-  OBR.player.onChange(p => {
-    me.name = p.name; me.color = p.color;
-    if (Array.isArray(p.metadata?.[KEY])) { mine = p.metadata[KEY]; render(); }
-  });
-  others = await OBR.party.getPlayers();
-  OBR.party.onChange(p => { others = p; render(); });
-  render();
+  try {
+    me.name = await OBR.player.getName(); me.color = await OBR.player.getColor();
+    // As rolagens do próprio jogador (inclusive as feitas na ficha) ficam na metadata dele: lê ao abrir e acompanha mudanças.
+    const m0 = await OBR.player.getMetadata(); if (Array.isArray(m0[KEY])) mine = m0[KEY];
+    OBR.player.onChange(p => {
+      me.name = p.name; me.color = p.color;
+      if (Array.isArray(p.metadata?.[KEY])) { mine = p.metadata[KEY]; render(); }
+    });
+    others = await OBR.party.getPlayers();
+    OBR.party.onChange(p => { others = p; render(); });
+    isReady = true; resolveReady();
+    render();
+    clearTimeout(dog); try { sessionStorage.removeItem("bd-tries"); } catch {}
+  } catch (e) { showMsg("Erro ao iniciar: " + e.message); }
 });
 
 async function doRoll(text) {
   $("err").textContent = "";
   let rolls;
   try { rolls = rollInput(text, mode); } catch (e) { $("err").textContent = "Não entendi: " + e.message; return; }
+  if (!isReady) {
+    $("err").textContent = "Conectando ao Owlbear…";
+    await Promise.race([ready, new Promise(r => setTimeout(r, 8000))]);
+    if (!isReady) { $("err").textContent = "Ainda conectando ao Owlbear. Tente rolar de novo em alguns segundos."; return; }
+    $("err").textContent = "";
+  }
   // Relê a metadata antes de somar, para não apagar rolagens que a ficha acabou de gravar.
   try { const meta = await OBR.player.getMetadata(); if (Array.isArray(meta[KEY])) mine = meta[KEY]; } catch (e) {}
   mine.push({ id: Math.random().toString(36).slice(2, 10), ts: Date.now(), name: me.name, color: me.color, rolls });
@@ -83,7 +106,8 @@ async function doRoll(text) {
   try { await OBR.player.setMetadata({ [KEY]: mine }); } catch (e) { $("err").textContent = "Não consegui compartilhar a rolagem."; }
 }
 
-function render() {
+function render() { try { renderInner(); } catch (e) { showMsg("Erro ao desenhar o chat: " + e.message); } }
+function renderInner() {
   const all = [...mine];
   for (const p of others) if (Array.isArray(p.metadata?.[KEY])) all.push(...p.metadata[KEY]);
   all.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -101,7 +125,6 @@ function render() {
 
 $("go").addEventListener("click", () => { const v = $("inp").value; if (v.trim()) { doRoll(v); $("inp").value = ""; } });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
-$("reload").addEventListener("click", () => location.reload()); // o histórico fica na metadata dos jogadores, então nada se perde
 $("quick").addEventListener("click", e => {
   const m = e.target.closest("button[data-m]");
   if (m) { mode = mode === m.dataset.m ? null : m.dataset.m; syncMode(); return; }
