@@ -22,8 +22,9 @@ label{display:block;font-size:10px;color:var(--mut);text-transform:uppercase;mar
 .row small{color:var(--mut)}.big{font-size:20px;text-align:center;font-weight:700}
 .atk{display:grid;grid-template-columns:2fr 1fr 2fr auto auto;gap:4px;margin-bottom:4px}
 #toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:var(--ac);color:#1b1d2a;padding:8px 14px;border-radius:8px;font-weight:700;display:none;z-index:9}
-button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.sm{padding:3px 6px;font-size:11px}#ini{cursor:pointer}</style></head><body>
+button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.sm{padding:3px 6px;font-size:11px}#ini{cursor:pointer}.stat{font-size:11px;color:var(--mut);align-self:center;margin-left:auto}</style></head><body>
 <div class="bar"><button id="exp">⬇ Exportar</button><button class="alt" id="imp">⬆ Importar</button><button class="alt" id="clr">Limpar</button><button class="alt" id="adv">Vantagem</button><button class="alt" id="dis">Desv.</button>
+<span id="st" class="stat">● Conectando ao Owlbear…</span>
 <input type="file" id="file" accept=".json" hidden></div>
 
 <div class="card"><div class="g g2">
@@ -92,29 +93,50 @@ function calc(){
 document.addEventListener('input',calc);document.addEventListener('change',calc);
 
 let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3500)}
-const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls',INIT='com.gaduart.warpath/init';
-let OBR=null,ready=false,eng=null,mode=null;
-import(ENGINE).then(m=>eng=m).catch(()=>{});
-import('https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm').then(m=>{OBR=m.default;OBR.onReady(()=>ready=true)}).catch(()=>{});
+const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls';
+const SDKS=['https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm','https://esm.sh/@owlbear-rodeo/sdk@3'];
+let OBR=null,ready=false,eng=null,mode=null,readyRes;
+const readyP=new Promise(r=>readyRes=r);
+const engP=import(ENGINE).then(m=>(eng=m)).catch(()=>null);
+const setStatus=(t,ok)=>{const s=$('#st');s.textContent=t;s.style.color=ok?'#7fc98f':'var(--mut)'};
+// Conecta ao Owlbear. Se ele não responder em 8s, cria uma instância nova do SDK
+// (sem recarregar a página, para não perder a ficha preenchida).
+(async()=>{
+  for(let n=0;!ready&&n<8;n++){
+    try{
+      const o=(await import(SDKS[n%2]+(n>1?'#t'+n:''))).default;
+      o.onReady(()=>{if(ready)return;ready=true;OBR=o;readyRes();setStatus('● Conectado ao Owlbear',true)});
+    }catch(e){continue}
+    await Promise.race([readyP,new Promise(r=>setTimeout(r,8000))]);
+  }
+  if(!ready)setStatus('● Sem conexão com o Owlbear',false);
+})();
 // Rola com o motor do Rollhaven e compartilha no mesmo formato do chat dele
 async function doRoll(text,prefix){
   let rolls;
-  try{if(!eng)throw new Error('motor do Rollhaven não carregou');rolls=eng.rollInput(text,mode)}catch(e){toast('Erro: '+e.message);return}
+  try{if(!eng)await engP;if(!eng)throw new Error('motor de dados não carregou');rolls=eng.rollInput(text,mode)}catch(e){toast('Erro: '+e.message);return}
   if(prefix)rolls.forEach(r=>r.label=(prefix+(r.label?' — '+r.label:'')).slice(0,80));
   const r=rolls[0],res=r.results[0],msg=`${r.label}: ${res.t}`;
-  // Iniciativa: manda nome do personagem + total para o Warpath casar com o token
-  let ini=null,semNome=false;
-  if(prefix==='Iniciativa'){const cn=V('nome').value.trim();if(cn)ini={id:Math.random().toString(36).slice(2,10),ts:Date.now(),name:cn,total:res.t};else semNome=true}
-  toast(msg+'  ⟵ '+res.d.replace(/~(-?\d+)~/g,'($1)')+(semNome?'  ⚠ preencha o nome do personagem para o Warpath':''));
-  if(!(OBR&&ready))return;
+  toast(msg+'  ⟵ '+res.d.replace(/~(-?\d+)~/g,'($1)'));
+  share(rolls,msg,Date.now());
+}
+// Fila: as rolagens são enviadas uma por vez, e esperam a conexão se ela ainda não estiver pronta.
+let q=Promise.resolve();
+const share=(rolls,msg,ts)=>(q=q.then(()=>send(rolls,msg,ts)).catch(()=>{}));
+async function send(rolls,msg,ts){
+  if(!ready){
+    setStatus('● Conectando… envio quando conectar',false);
+    await Promise.race([readyP,new Promise(r=>setTimeout(r,30000))]);
+  }
+  if(!ready){toast('Rolou, mas não deu pra compartilhar: sem conexão com o Owlbear.');return}
   try{
     OBR.notification.show(msg.slice(0,120));
     const [name,color,meta]=await Promise.all([OBR.player.getName(),OBR.player.getColor(),OBR.player.getMetadata()]);
     const arr=Array.isArray(meta[KEY])?meta[KEY]:[];
-    arr.push({id:Math.random().toString(36).slice(2,10),ts:Date.now(),name,color,rolls});
+    arr.push({id:Math.random().toString(36).slice(2,10),ts,name,color,rolls});
     while(arr.length>10||(arr.length>1&&JSON.stringify(arr).length>7000))arr.shift();
-    await OBR.player.setMetadata(ini?{[KEY]:arr,[INIT]:ini}:{[KEY]:arr});
-  }catch(e){}
+    await OBR.player.setMetadata({[KEY]:arr});
+  }catch(e){toast('Rolou, mas não consegui compartilhar: '+((e&&e.message)||'erro'))}
 }
 const roll=(label,m)=>doRoll('1d20'+(m?sg(m):''),label);
 document.addEventListener('click',e=>{
