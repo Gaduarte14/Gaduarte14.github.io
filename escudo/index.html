@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Master Shield</title>
+<style>
+:root{--bg:#14171f;--panel:#1d222d;--line:#333b4d;--ink:#e6e9f0;--mute:#8f98ab;--ac:#d6584f;--ok:#7fc98f;--warn:#e0a44a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,sans-serif}
+h1{font:600 18px Georgia,serif;margin:0;display:flex;align-items:center;gap:8px}
+h1 svg{width:22px;height:22px}
+#st{font-size:12px;color:var(--mute)}
+#log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.empty{color:var(--mute);margin:auto 0}
+.ent{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--ac);border-radius:8px;padding:8px 10px}
+.hd{display:flex;align-items:baseline;gap:6px}
+.hd .n{color:var(--ac);font-weight:600}
+.hd b{font:700 20px Georgia,serif}
+.hd time{margin-left:auto;font-size:12px;color:var(--mute)}
+.det{color:var(--mute);font-size:13px;word-break:break-word}
+.rs{font-size:12px;color:var(--warn)}
+.stt{font-size:12px;margin-top:4px;color:var(--mute)}
+.stt.ok{color:var(--ok)}
+.stt.bad{color:#e57a7a}
+#err{color:#e57a7a;font-size:12px;min-height:16px}
+.send{display:flex;gap:6px}
+input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ac)}
+button.go{background:var(--ac);border-color:var(--ac);color:#14171f;font-weight:700}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--ac)}
+.tools{display:flex;gap:6px;align-items:center}
+details{font-size:12px;color:var(--mute);flex:1}
+details summary{cursor:pointer}
+details p{margin:6px 0 0}
+code{color:var(--ink)}
+</style></head><body>
+<h1><svg viewBox="0 0 24 24" fill="none" stroke="#d6584f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M12 7v9M8 11h8"/></svg> Master Shield</h1>
+<div id="st">Conectando ao Owlbear…</div>
+<div id="log"><div class="empty">Nenhum dano rolado ainda.</div></div>
+<div id="err"></div>
+<div class="send"><input id="inp" type="text" placeholder="1d10+15 ash R" autocomplete="off"><button class="go" id="go">Rolar dano</button></div>
+<div class="tools">
+<details><summary>Como usar</summary>
+<p>Fórmula + nome do personagem (igual ao da ficha): <code>2d6+5 ash</code></p>
+<p>Resistência ao dano todo: <code>2d6+5 ash R</code></p>
+<p>Resistência só a um trecho: <code>1d10+15+2d6 ash R 2d6</code></p>
+<p>Vários alvos: <code>[2d6 ash] [1d8+3 thorin R]</code></p>
+<p>Resistência divide por 2 arredondando pra baixo. O PV temporário é gasto primeiro e o PV da ficha para em 0.</p></details>
+<button id="cancel" title="Cancela os danos que ainda não chegaram em nenhuma ficha">Cancelar pendentes</button>
+</div>
+<script type="module">
+const ENG = "https://gaduarte14.github.io/dados/engine.js";
+const P = "com.gaduart.master-shield/", KD = P + "d-", KA = P + "a-";
+const $ = id => document.getElementById(id);
+const setSt = t => { $("st").textContent = t; };
+
+let OBR, sdkErr;
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) { sdkErr = e; }
+}
+if (!OBR) { setSt("Erro ao carregar o SDK do Owlbear: " + (sdkErr && sdkErr.message)); throw sdkErr; }
+
+let isReady = false;
+const tries = (() => { try { return +sessionStorage.getItem("ms-tries") || 0; } catch { return 0; } })();
+const dog = setTimeout(() => {
+  if (isReady) return;
+  if (tries < 2) { try { sessionStorage.setItem("ms-tries", tries + 1); } catch {} location.reload(); return; }
+  setSt("O Owlbear não respondeu. ");
+  const b = document.createElement("button"); b.textContent = "Tentar de novo";
+  b.onclick = () => { try { sessionStorage.removeItem("ms-tries"); } catch {} location.reload(); };
+  $("st").append(b);
+}, 12000);
+
+let eng = null;
+import(ENG).then(m => { eng = m; }).catch(() => {});
+
+//LOGIC-START
+const nrm = s => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const key = s => s.toLowerCase().replace(/\s+/g, "");
+// Divide a fórmula em termos de soma/subtração (fora de parênteses).
+function splitTop(f) {
+  const out = []; let depth = 0, cur = "";
+  for (const ch of f) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if ((ch === "+" || ch === "-") && depth === 0 && cur.trim() && !/[*\/]\s*$/.test(cur)) { out.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out.map(s => { s = s.trim(); return { sign: s[0] === "-" ? "-" : "+", body: s.replace(/^[+-]\s*/, "").trim() }; });
+}
+// Rola um trecho "1d10+15+2d6 ash R 2d6" e calcula o dano final.
+function one(seg) {
+  if (/^\s*\d{1,2}#/.test(seg)) throw new Error("Repetição com # não funciona aqui. Role uma de cada vez.");
+  const first = eng.rollInput(seg)[0];
+  let nome = first.label, hasR = false, spec = "";
+  const rm = /^(.*?)\s+r(?:\s+(.*))?$/i.exec(first.label);
+  if (rm) { nome = rm[1]; hasR = true; spec = rm[2] || ""; }
+  nome = nome.trim();
+  if (!nome) throw new Error("Faltou o nome do personagem. Ex.: 1d10+15 ash");
+  const rkeys = new Set();
+  if (hasR && spec.trim())
+    for (const tok of spec.split(/[\s,;]+/).filter(Boolean))
+      for (const t of splitTop(tok)) rkeys.add(key(t.body));
+  const terms = splitTop(first.formula).map(t => {
+    const r = eng.rollInput(t.body)[0].results[0];
+    return { sign: t.sign, body: t.body, v: t.sign === "-" ? -r.t : r.t, d: r.d, res: hasR && (!rkeys.size || rkeys.has(key(t.body))) };
+  });
+  if (rkeys.size && !terms.some(t => t.res)) throw new Error("Resistência: não achei \"" + spec.trim() + "\" na fórmula.");
+  let normal = 0, resSum = 0;
+  terms.forEach(t => { if (t.res) resSum += t.v; else normal += t.v; });
+  const halved = resSum > 0 ? Math.floor(resSum / 2) : resSum;
+  return { nome: nrm(nome), alvo: nome, terms, hasR, bruto: normal + resSum, resSum, halved, final: Math.max(0, normal + halved) };
+}
+//LOGIC-END
+
+const fd = d => d.replace(/~(-?\d+)~/g, "($1)");
+const entries = new Map(), pending = new Set(), seenAck = new Set();
+const log = $("log");
+
+function addEntry(res, id) {
+  const e = document.createElement("div"); e.className = "ent";
+  const hd = document.createElement("div"); hd.className = "hd";
+  const n = document.createElement("span"); n.className = "n"; n.textContent = res.alvo;
+  const t = document.createElement("b"); t.textContent = res.final;
+  const l = document.createElement("span"); l.textContent = "de dano";
+  const tm = document.createElement("time"); tm.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  hd.append(n, t, l, tm);
+  const det = document.createElement("div"); det.className = "det";
+  det.textContent = res.terms.map((x, i) =>
+    (i ? (x.sign === "-" ? " − " : " + ") : (x.sign === "-" ? "−" : "")) + x.body + (x.d !== x.body ? " " + fd(x.d) : "") + (res.hasR && x.res ? "*" : "")
+  ).join("") + " = " + res.bruto;
+  e.append(hd, det);
+  if (res.hasR) {
+    const r = document.createElement("div"); r.className = "rs";
+    r.textContent = "* resistência: " + res.resSum + " → " + res.halved + " (metade, arredondada pra baixo)";
+    e.append(r);
+  }
+  const st = document.createElement("div"); st.className = "stt"; st.textContent = "Enviando…";
+  e.append(st);
+  const emp = log.querySelector(".empty"); if (emp) emp.remove();
+  log.prepend(e);
+  while (log.children.length > 15) log.lastChild.remove();
+  entries.set(id, { st, alvo: res.alvo });
+  return st;
+}
+
+function onAck(m) {
+  const drop = {};
+  for (const [k, v] of Object.entries(m || {})) {
+    if (!k.startsWith(KA) || !v || typeof v !== "object" || seenAck.has(k)) continue;
+    seenAck.add(k);
+    const en = entries.get(v.id);
+    if (en) {
+      pending.delete(v.id);
+      const abs = v.abs ? " · PV temp. −" + v.abs : "";
+      en.st.className = "stt ok";
+      en.st.textContent = v.antes === v.depois && !v.abs
+        ? "✔ " + en.alvo + ": PV continua em " + v.depois
+        : "✔ " + en.alvo + ": PV " + v.antes + " → " + v.depois + abs;
+    }
+    drop[k] = null;
+  }
+  if (Object.keys(drop).length) OBR.room.setMetadata(drop).catch(() => {});
+}
+
+async function run() {
+  $("err").textContent = "";
+  const raw = $("inp").value.trim();
+  if (!raw) return;
+  if (!eng) { try { eng = await import(ENG); } catch { $("err").textContent = "Não consegui carregar o motor de dados."; return; } }
+  if (!isReady) { $("err").textContent = "Ainda conectando ao Owlbear…"; return; }
+  const segs = [...raw.matchAll(/\[([^\]]+)\]/g)].map(m => m[1]);
+  let results;
+  try { results = (segs.length ? segs.slice(0, 10) : [raw]).map(one); }
+  catch (e) { $("err").textContent = e.message; return; }
+  for (const res of results) {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const st = addEntry(res, id);
+    try {
+      await OBR.room.setMetadata({ [KD + id]: { id, nome: res.nome, alvo: res.alvo, total: res.final, ts: Date.now() } });
+      pending.add(id);
+      st.textContent = "⏳ Enviado. Aguardando a ficha de " + res.alvo + " estar aberta.";
+    } catch (e) {
+      st.className = "stt bad";
+      st.textContent = "Não consegui enviar: " + ((e && e.message) || "erro");
+    }
+  }
+}
+
+async function cancelPending() {
+  const m = await OBR.room.getMetadata(), nul = {}, del = {};
+  for (const [k, v] of Object.entries(m)) if (k.startsWith(KD) && v && typeof v === "object") { nul[k] = null; del[k] = undefined; }
+  if (Object.keys(nul).length) { await OBR.room.setMetadata(nul); try { await OBR.room.setMetadata(del); } catch {} }
+  for (const id of pending) { const en = entries.get(id); if (en) { en.st.className = "stt"; en.st.textContent = "Cancelado."; } }
+  pending.clear();
+  $("err").textContent = Object.keys(nul).length ? "" : "Não havia nada pendente.";
+}
+
+async function init() {
+  const role = await OBR.player.getRole();
+  if (role !== "GM") {
+    document.body.innerHTML = '<h1>Master Shield</h1><p style="color:#8f98ab">Esta extensão é só para o mestre.</p>';
+    return;
+  }
+  setSt("● Conectado ao Owlbear");
+  $("st").style.color = "#7fc98f";
+  // Limpeza: remove chaves já usadas e danos esquecidos há mais de 24h.
+  const m = await OBR.room.getMetadata(), kill = {};
+  for (const [k, v] of Object.entries(m))
+    if (k.startsWith(P) && (v === null || (v && typeof v === "object" && Date.now() - (v.ts || 0) > 864e5))) kill[k] = undefined;
+  if (Object.keys(kill).length) OBR.room.setMetadata(kill).catch(() => {});
+  onAck(m);
+  OBR.room.onMetadataChange(onAck);
+  $("go").onclick = run;
+  $("inp").addEventListener("keydown", e => { if (e.key === "Enter") run(); });
+  $("cancel").onclick = () => cancelPending().catch(e => { $("err").textContent = (e && e.message) || "erro"; });
+}
+
+OBR.onReady(() => {
+  isReady = true; clearTimeout(dog);
+  try { sessionStorage.removeItem("ms-tries"); } catch {}
+  init().catch(e => setSt("Erro: " + ((e && e.message) || e)));
+});
+</script></body></html>

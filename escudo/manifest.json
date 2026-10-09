@@ -1,0 +1,14 @@
+{
+  "name": "Master Shield",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Escudo do mestre: rola o dano em segredo e desconta o PV na ficha do jogador, com PV temporário e resistência.",
+  "icon": "/escudo/icon.svg",
+  "action": {
+    "title": "Master Shield",
+    "icon": "/escudo/action-icon.svg",
+    "popover": "/escudo/index.html",
+    "height": 520,
+    "width": 380
+  }
+}
