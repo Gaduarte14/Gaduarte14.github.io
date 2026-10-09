@@ -193,4 +193,41 @@ $('#file').onchange=e=>{
 $('#clr').onclick=()=>{if(confirm('Limpar a ficha inteira?'))location.reload()};
 try{const rc=sessionStorage.getItem('fg-recover');if(rc){sessionStorage.removeItem('fg-recover');const d=JSON.parse(rc);els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]})}}catch(e){}
 calc();
+
+// ===== Master Shield: recebe dano rolado pelo mestre e desconta do PV =====
+//MS-START
+const MSD='com.gaduart.master-shield/d-',MSA='com.gaduart.master-shield/a-';
+const nrm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+// PV temporário absorve primeiro; o resto vai pro PV, que para em 0.
+function msCalc(pv,pvt,total){
+  let d=Math.max(0,Math.floor(total)||0);const t=Math.max(0,pvt);
+  const abs=Math.min(t,d);d-=abs;
+  return{antes:pv,depois:Math.max(0,pv-d),abs,pvtDepois:t-abs};
+}
+//MS-END
+let msDone=new Set(),msMeta={};
+try{msDone=new Set(JSON.parse(sessionStorage.getItem('ms-done')||'[]'))}catch(e){}
+function msScan(m){
+  msMeta=m||{};
+  const me=nrm(V('nome').value);if(!me)return;
+  for(const [k,v] of Object.entries(msMeta)){
+    if(!k.startsWith(MSD)||!v||typeof v!=='object'||!v.id||v.nome!==me||msDone.has(v.id)||Date.now()-(v.ts||0)>864e5)continue;
+    msDone.add(v.id);
+    try{sessionStorage.setItem('ms-done',JSON.stringify([...msDone].slice(-200)))}catch(e){}
+    const c=msCalc(num('pv'),num('pvt'),v.total);
+    if(c.depois!==c.antes)V('pv').value=c.depois;
+    if(c.abs>0)V('pvt').value=c.pvtDepois;
+    toast('💥 '+(v.alvo||'Dano')+': −'+v.total+' de dano'+(c.abs?' ('+c.abs+' no PV temp.)':'')+' · PV '+c.antes+' → '+c.depois);
+    // Marca como usado (null) e avisa o mestre.
+    window.__sdk.room.setMetadata({[k]:null,[MSA+v.id]:{id:v.id,antes:c.antes,depois:c.depois,abs:c.abs,ts:Date.now()}}).catch(()=>{});
+  }
+}
+readyP.then(async()=>{
+  try{
+    const O=window.__sdk;
+    msScan(await O.room.getMetadata());
+    O.room.onMetadataChange(msScan);
+    V('nome').addEventListener('change',()=>msScan(msMeta));
+  }catch(e){}
+});
 </script></body></html>
