@@ -10,7 +10,7 @@ body{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--bg
 h1{font:600 18px Georgia,serif;margin:0;display:flex;align-items:center;gap:8px}
 h1 svg{width:22px;height:22px}
 #st{font-size:12px;color:var(--mute)}
-#log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+#log,#log2{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .empty{color:var(--mute);margin:auto 0}
 .ent{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--ac);border-radius:8px;padding:8px 10px}
 .hd{display:flex;align-items:baseline;gap:6px}
@@ -34,9 +34,19 @@ details{font-size:12px;color:var(--mute);flex:1}
 details summary{cursor:pointer}
 details p{margin:6px 0 0}
 code{color:var(--ink)}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;padding:7px 10px}
+.tabs button.on,button.tg.on{background:var(--ac);border-color:var(--ac);color:#14171f;font-weight:700}
+section{display:flex;flex-direction:column;gap:8px;flex:1;min-height:0}
+section[hidden]{display:none}
+.ent.o{border-left-color:var(--mute)}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.note{font-size:12px;color:var(--mute)}
 </style></head><body>
 <h1><svg viewBox="0 0 24 24" fill="none" stroke="#d6584f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M12 7v9M8 11h8"/></svg> Master Shield</h1>
 <div id="st">Conectando ao Owlbear…</div>
+<div class="tabs"><button id="tab-d" class="on">Dano</button><button id="tab-o">Outros</button></div>
+<section id="p-d">
 <div id="log"><div class="empty">Nenhum dano rolado ainda.</div></div>
 <div id="err"></div>
 <div class="send"><input id="inp" type="text" placeholder="1d10+15 ash R" autocomplete="off"><button class="go" id="go">Rolar dano</button></div>
@@ -49,6 +59,14 @@ code{color:var(--ink)}
 <p>Resistência divide por 2 arredondando pra baixo. O PV temporário é gasto primeiro e o PV da ficha para em 0.</p></details>
 <button id="cancel" title="Cancela os danos que ainda não chegaram em nenhuma ficha">Cancelar pendentes</button>
 </div>
+</section>
+<section id="p-o" hidden>
+<div class="note">Rolagens normais só pra você. Nada daqui vai pro chat nem pros jogadores.</div>
+<div id="log2"><div class="empty">Nenhuma rolagem ainda.</div></div>
+<div id="err2"></div>
+<div class="quick" id="quick"></div>
+<div class="send"><input id="inp2" type="text" placeholder="2d20kh1+5 percepção" autocomplete="off"><button class="go" id="go2">Rolar</button></div>
+</section>
 <script type="module">
 const ENG = "https://gaduarte14.github.io/dados/engine.js";
 const P = "com.gaduart.master-shield/", KD = P + "d-", KA = P + "a-";
@@ -141,7 +159,7 @@ function addEntry(res, id) {
   e.append(st);
   const emp = log.querySelector(".empty"); if (emp) emp.remove();
   log.prepend(e);
-  while (log.children.length > 15) log.lastChild.remove();
+  while (log.children.length > 10) log.lastChild.remove();
   entries.set(id, { st, alvo: res.alvo });
   return st;
 }
@@ -198,6 +216,51 @@ async function cancelPending() {
   $("err").textContent = Object.keys(nul).length ? "" : "Não havia nada pendente.";
 }
 
+// ===== Aba Outros: rolagem normal, só pro mestre =====
+let omode = null;
+const log2 = $("log2");
+async function rollOther(text) {
+  $("err2").textContent = "";
+  const raw = (text || $("inp2").value).trim();
+  if (!raw) return;
+  if (!eng) { try { eng = await import(ENG); } catch { $("err2").textContent = "Não consegui carregar o motor de dados."; return; } }
+  let rolls;
+  try { rolls = eng.rollInput(raw, omode); } catch (e) { $("err2").textContent = e.message; return; }
+  for (const r of rolls) for (const res of r.results) {
+    const e = document.createElement("div"); e.className = "ent o";
+    const hd = document.createElement("div"); hd.className = "hd";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = r.label || r.formula;
+    const t = document.createElement("b"); t.textContent = res.t;
+    const tm = document.createElement("time"); tm.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    hd.append(n, t, tm);
+    const det = document.createElement("div"); det.className = "det";
+    det.textContent = r.formula + " ⟵ " + fd(res.d);
+    e.append(hd, det);
+    const emp = log2.querySelector(".empty"); if (emp) emp.remove();
+    log2.prepend(e);
+  }
+  while (log2.children.length > 10) log2.lastChild.remove();
+}
+function showTab(d) {
+  $("p-d").hidden = !d; $("p-o").hidden = d;
+  $("tab-d").classList.toggle("on", d); $("tab-o").classList.toggle("on", !d);
+}
+function setupOther() {
+  const q = $("quick");
+  for (const [l, f] of [["d4", "1d4"], ["d6", "1d6"], ["d8", "1d8"], ["d10", "1d10"], ["d12", "1d12"], ["d20", "1d20"], ["d%", "1d%"]]) {
+    const b = document.createElement("button"); b.textContent = l; b.onclick = () => rollOther(f); q.append(b);
+  }
+  for (const [l, m] of [["Vantagem", "adv"], ["Desvantagem", "dis"]]) {
+    const b = document.createElement("button"); b.className = "tg"; b.textContent = l;
+    b.onclick = () => { omode = omode === m ? null : m; for (const x of q.querySelectorAll(".tg")) x.classList.toggle("on", x === b && omode === m); };
+    q.append(b);
+  }
+  $("go2").onclick = () => rollOther();
+  $("inp2").addEventListener("keydown", e => { if (e.key === "Enter") rollOther(); });
+  $("tab-d").onclick = () => showTab(true);
+  $("tab-o").onclick = () => showTab(false);
+}
+
 async function init() {
   const role = await OBR.player.getRole();
   if (role !== "GM") {
@@ -213,6 +276,7 @@ async function init() {
   if (Object.keys(kill).length) OBR.room.setMetadata(kill).catch(() => {});
   onAck(m);
   OBR.room.onMetadataChange(onAck);
+  setupOther();
   $("go").onclick = run;
   $("inp").addEventListener("keydown", e => { if (e.key === "Enter") run(); });
   $("cancel").onclick = () => cancelPending().catch(e => { $("err").textContent = (e && e.message) || "erro"; });
