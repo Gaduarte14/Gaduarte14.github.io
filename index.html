@@ -36,6 +36,8 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px s
 input[type=color]{width:38px;height:38px;border:1px solid var(--line);border-radius:50%;padding:0;background:none;cursor:pointer}
 input.light{flex:1;accent-color:var(--gold)}
 .empty{color:var(--mute)}
+.search{padding:8px 10px;border-bottom:1px solid var(--line)}.search input{width:100%}
+.track[hidden]{display:none}
 .master{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .master label{font-size:13px;white-space:nowrap}
 .master input{flex:1;min-width:0;accent-color:var(--gold)}
@@ -75,8 +77,9 @@ const dog = setTimeout(() => {
 }, 12000);
 
 const NS = "com.gaduart.mesa-de-som";
-let lib = { folders: [] }, playing = {}, isGM = false, openFolder = null, showNew = false;
+let lib = { folders: [] }, playing = {}, isGM = false, openFolder = null, showNew = false, query = "";
 const uid = () => Math.random().toString(36).slice(2, 9);
+const nrmS = s => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const vidId = u => { const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/) || u.match(/^([\w-]{11})$/); return m && m[1]; };
 
@@ -113,10 +116,11 @@ function renderInner() {
   const f = isGM && openFolder && lib.folders.find(x => x.id === openFolder);
   if (f) {
     h += `<div class="folderview"><div class="fvhead"><button data-a="back">← Voltar</button><span class="swatch" style="background:${f.color}"></span><span class="fvname">${esc(f.name)}</span><button class="x" data-a="delFolder" data-f="${f.id}" title="Apagar pasta">×</button></div>`;
+    if (f.tracks.length) h += `<div class="search"><input type="text" id="q" placeholder="Pesquisar faixa nesta pasta…" value="${esc(query)}" autocomplete="off" aria-label="Pesquisar faixa"></div><p class="empty" id="noq" style="padding:10px;margin:0" hidden>Nenhuma faixa com esse nome.</p>`;
     if (!f.tracks.length) h += '<p class="empty" style="padding:10px;margin:0">Nenhuma faixa ainda.</p>';
     for (const t of f.tracks) {
       const on = !!playing[t.id];
-      h += `<div class="track ${on ? "on" : ""}"><button class="play" data-a="toggle" data-t="${t.id}" aria-label="${on ? "Parar" : "Tocar"} ${esc(t.title)}">${on ? "■" : "▶"}</button><span>${esc(t.title)}</span><button class="x" data-a="delTrack" data-t="${t.id}" title="Remover faixa">×</button>
+      h += `<div class="track ${on ? "on" : ""}" data-title="${esc(nrmS(t.title))}"><button class="play" data-a="toggle" data-t="${t.id}" aria-label="${on ? "Parar" : "Tocar"} ${esc(t.title)}">${on ? "■" : "▶"}</button><span>${esc(t.title)}</span><button class="x" data-a="delTrack" data-t="${t.id}" title="Remover faixa">×</button>
       <div class="ctl"><span>Vol</span><input type="range" min="0" max="100" value="${t.vol}" data-a="vol" data-t="${t.id}"><label><input type="checkbox" ${t.loop ? "checked" : ""} data-a="loop" data-t="${t.id}"> repetir</label></div></div>`;
     }
     h += `<div class="add"><input type="text" data-n="${f.id}" placeholder="Link do YouTube"><input type="text" data-m="${f.id}" placeholder="Nome" style="max-width:110px"><button data-a="addTrack" data-f="${f.id}">Adicionar</button></div></div>`;
@@ -130,13 +134,20 @@ function renderInner() {
     h += "</div>";
   }
   a.innerHTML = h;
+  applyQ();
 }
+function applyQ() {
+  const q = nrmS(query); let n = 0, tot = 0;
+  document.querySelectorAll(".track").forEach(el => { tot++; const ok = !q || el.dataset.title.includes(q); el.hidden = !ok; if (ok) n++; });
+  const m = document.getElementById("noq"); if (m) m.hidden = !(q && tot && !n);
+}
+document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyQ(); } });
 
 document.addEventListener("click", e => {
   const b = e.target.closest("button[data-a]"); if (!b || !isGM) return;
   const { a, f, t } = b.dataset;
-  if (a === "open") { openFolder = f; showNew = false; return render(); }
-  if (a === "back") { openFolder = null; return render(); }
+  if (a === "open") { openFolder = f; showNew = false; query = ""; return render(); }
+  if (a === "back") { openFolder = null; query = ""; return render(); }
   if (a === "toggleNew") { showNew = !showNew; return render(); }
   if (a === "export") return doExport();
   if (a === "import") return document.getElementById("fileImport").click();
