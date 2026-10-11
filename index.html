@@ -38,6 +38,12 @@ input.light{flex:1;accent-color:var(--gold)}
 .empty{color:var(--mute)}
 .search{padding:8px 10px;border-bottom:1px solid var(--line)}.search input{width:100%}
 .track[hidden]{display:none}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.ov[hidden]{display:none}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;max-width:320px;width:100%}
+.dlg p{margin:0 0 12px}
+.dlg .btns{display:flex;gap:8px;justify-content:flex-end}
+.dlg .danger{background:#b3453d;border-color:#b3453d;color:#fff}
 .master{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 .master label{font-size:13px;white-space:nowrap}
 .master input{flex:1;min-width:0;accent-color:var(--gold)}
@@ -46,6 +52,7 @@ input.light{flex:1;accent-color:var(--gold)}
 <h1><img src="icon.png" alt=""> Bard's Hall</h1>
 <div class="master"><label for="master">Volume geral</label><input type="range" id="master" min="0" max="100" value="100" title="Só muda o seu som, não o dos outros"><output id="masterVal">100%</output></div>
 <div id="app">Carregando…</div>
+<div class="ov" id="confirm" hidden><div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="cmsg"><p id="cmsg"></p><div class="btns"><button data-a="delNo" id="cno">Não</button><button class="danger" data-a="delYes">Sim, apagar</button></div></div></div>
 <input type="file" id="fileImport" accept="application/json" style="display:none">
 <script type="module">
 // Volume geral: cada pessoa regula o seu, guardado só neste dispositivo.
@@ -143,9 +150,23 @@ function applyQ() {
 }
 document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyQ(); } });
 
+let delId = null;
+function closeAsk() { delId = null; document.getElementById("confirm").hidden = true; }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && delId) closeAsk(); });
 document.addEventListener("click", e => {
+  if (e.target.id === "confirm") return closeAsk();
   const b = e.target.closest("button[data-a]"); if (!b || !isGM) return;
   const { a, f, t } = b.dataset;
+  if (a === "delFolder") {
+    const fo = lib.folders.find(x => x.id === f); if (!fo) return;
+    delId = f;
+    const n = fo.tracks.length;
+    document.getElementById("cmsg").textContent = "Apagar a pasta “" + fo.name + "”" + (n ? " e " + (n === 1 ? "a faixa" : "as " + n + " faixas") + " dentro dela" : "") + "? Isso não dá pra desfazer.";
+    document.getElementById("confirm").hidden = false;
+    document.getElementById("cno").focus();
+    return;
+  }
+  if (a === "delNo") return closeAsk();
   if (a === "open") { openFolder = f; showNew = false; query = ""; return render(); }
   if (a === "back") { openFolder = null; query = ""; return render(); }
   if (a === "toggleNew") { showNew = !showNew; return render(); }
@@ -156,7 +177,12 @@ document.addEventListener("click", e => {
     lib.folders.push({ id: uid(), name, color: shade(document.getElementById("nfc").value, document.getElementById("nfl").value), tracks: [] });
     showNew = false;
   }
-  if (a === "delFolder") { lib.folders.find(x => x.id === f).tracks.forEach(x => delete playing[x.id]); lib.folders = lib.folders.filter(x => x.id !== f); openFolder = null; }
+  if (a === "delYes") {
+    const id = delId; closeAsk(); if (!id) return;
+    const fo = lib.folders.find(x => x.id === id);
+    if (fo) fo.tracks.forEach(x => delete playing[x.id]);
+    lib.folders = lib.folders.filter(x => x.id !== id); openFolder = null;
+  }
   if (a === "addTrack") {
     const url = document.querySelector(`[data-n="${f}"]`).value.trim(), name = document.querySelector(`[data-m="${f}"]`).value.trim();
     const v = vidId(url); if (!v) return alert("Link do YouTube inválido.");
