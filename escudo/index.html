@@ -219,6 +219,40 @@ async function cancelPending() {
 // ===== Aba Outros: rolagem normal, só pro mestre =====
 let omode = null;
 const log2 = $("log2");
+function addOtherEntry({ title, total, formula, d, sub }) {
+  const e = document.createElement("div"); e.className = "ent o";
+  const hd = document.createElement("div"); hd.className = "hd";
+  const n = document.createElement("span"); n.className = "n"; n.textContent = title;
+  const t = document.createElement("b"); t.textContent = total;
+  const tm = document.createElement("time"); tm.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  hd.append(n, t, tm);
+  const det = document.createElement("div"); det.className = "det";
+  det.textContent = formula + " ⟵ " + fd(d);
+  e.append(hd, det);
+  if (sub) { const sb = document.createElement("div"); sb.className = "rs"; sb.textContent = sub; e.append(sb); }
+  const emp = log2.querySelector(".empty"); if (emp) emp.remove();
+  log2.prepend(e);
+  while (log2.children.length > 10) log2.lastChild.remove();
+}
+// Rolagens secretas mandadas pelas fichas (botão "Rolar GM"): só o mestre rola e vê.
+const KG = P + "g-", seenG = new Set();
+let unseen = 0;
+async function onGm(m) {
+  for (const [k, v] of Object.entries(m || {})) {
+    if (!k.startsWith(KG) || !v || typeof v !== "object" || !v.id || seenG.has(v.id) || Date.now() - (v.ts || 0) > 864e5) continue;
+    seenG.add(v.id);
+    if (!eng) { try { eng = await import(ENG); } catch { seenG.delete(v.id); continue; } }
+    let rolls;
+    try { rolls = eng.rollInput(String(v.formula || "").slice(0, 60), v.mode === "adv" || v.mode === "dis" ? v.mode : null); }
+    catch { continue; }
+    const quem = String(v.quem || "Jogador").slice(0, 60), rot = String(v.rotulo || "Rolagem").slice(0, 60);
+    for (const r of rolls) for (const res of r.results)
+      addOtherEntry({ title: quem + " · " + rot, total: res.t, formula: r.formula, d: res.d, sub: v.pers ? "Personagem: " + String(v.pers).slice(0, 60) : "" });
+    if ($("p-o").hidden) { unseen++; $("tab-o").textContent = "Outros (" + unseen + ")"; }
+    try { OBR.notification.show(quem + " rolou " + rot + " em segredo"); } catch {}
+    OBR.room.setMetadata({ [k]: null }).catch(() => {});
+  }
+}
 async function rollOther(text) {
   $("err2").textContent = "";
   const raw = (text || $("inp2").value).trim();
@@ -226,22 +260,10 @@ async function rollOther(text) {
   if (!eng) { try { eng = await import(ENG); } catch { $("err2").textContent = "Não consegui carregar o motor de dados."; return; } }
   let rolls;
   try { rolls = eng.rollInput(raw, omode); } catch (e) { $("err2").textContent = e.message; return; }
-  for (const r of rolls) for (const res of r.results) {
-    const e = document.createElement("div"); e.className = "ent o";
-    const hd = document.createElement("div"); hd.className = "hd";
-    const n = document.createElement("span"); n.className = "n"; n.textContent = r.label || r.formula;
-    const t = document.createElement("b"); t.textContent = res.t;
-    const tm = document.createElement("time"); tm.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    hd.append(n, t, tm);
-    const det = document.createElement("div"); det.className = "det";
-    det.textContent = r.formula + " ⟵ " + fd(res.d);
-    e.append(hd, det);
-    const emp = log2.querySelector(".empty"); if (emp) emp.remove();
-    log2.prepend(e);
-  }
-  while (log2.children.length > 10) log2.lastChild.remove();
+  for (const r of rolls) for (const res of r.results) addOtherEntry({ title: r.label || r.formula, total: res.t, formula: r.formula, d: res.d });
 }
 function showTab(d) {
+  if (!d) { unseen = 0; $("tab-o").textContent = "Outros"; }
   $("p-d").hidden = !d; $("p-o").hidden = d;
   $("tab-d").classList.toggle("on", d); $("tab-o").classList.toggle("on", !d);
 }
@@ -275,7 +297,8 @@ async function init() {
     if (k.startsWith(P) && (v === null || (v && typeof v === "object" && Date.now() - (v.ts || 0) > 864e5))) kill[k] = undefined;
   if (Object.keys(kill).length) OBR.room.setMetadata(kill).catch(() => {});
   onAck(m);
-  OBR.room.onMetadataChange(onAck);
+  onGm(m);
+  OBR.room.onMetadataChange(m2 => { onAck(m2); onGm(m2); });
   setupOther();
   $("go").onclick = run;
   $("inp").addEventListener("keydown", e => { if (e.key === "Enter") run(); });
