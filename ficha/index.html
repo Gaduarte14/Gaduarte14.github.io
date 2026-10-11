@@ -35,7 +35,11 @@ label{display:block;font-size:10px;color:var(--mut);text-transform:uppercase;mar
 .row small{color:var(--mut)}.big{font-size:20px;text-align:center;font-weight:700}
 .atk{display:grid;grid-template-columns:2fr 1fr 2fr auto auto;gap:4px;margin-bottom:4px}
 #toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:var(--ac);color:#1b1d2a;padding:8px 14px;border-radius:8px;font-weight:700;display:none;z-index:9}
-button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.sm{padding:3px 6px;font-size:11px}#ini{cursor:pointer}.stat{font-size:11px;color:var(--mut);align-self:center;margin-left:auto}</style></head><body>
+button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.sm{padding:3px 6px;font-size:11px}
+button.dots{background:none;border:none;color:var(--mut);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px}
+.ab>div{position:relative}.ab button.dots{position:absolute;top:0;right:0}
+#gmenu{position:fixed;display:none;z-index:10;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+#gmenu button{display:block;width:100%;text-align:left;white-space:nowrap}#ini{cursor:pointer}.stat{font-size:11px;color:var(--mut);align-self:center;margin-left:auto}</style></head><body>
 <div class="bar"><button id="exp">⬇ Exportar</button><button class="alt" id="imp">⬆ Importar</button><button class="alt" id="clr">Limpar</button><button class="alt" id="adv">Vantagem</button><button class="alt" id="dis">Desv.</button>
 <span id="st" class="stat">● Conectando ao Owlbear…</span>
 <input type="file" id="file" accept=".json" hidden></div>
@@ -80,15 +84,16 @@ button.alt.on{background:var(--ac);color:#1b1d2a;border-color:var(--ac)}button.s
 <div class="card"><h3>Outras Características</h3><textarea data-k="carac" rows="4"></textarea></div>
 <div class="card"><h3>Personalidade</h3><div class="g"><div><label>Traços</label><textarea data-k="tracos"></textarea></div><div><label>Ideais</label><textarea data-k="ideais"></textarea></div><div><label>Vínculos</label><textarea data-k="vinc"></textarea></div><div><label>Defeitos</label><textarea data-k="def"></textarea></div></div></div>
 <div class="card"><h3>Anotações / História</h3><textarea data-k="notas" rows="6"></textarea></div>
+<div id="gmenu"><button id="gmgo">🎲 Rolar GM</button></div>
 <div id="toast"></div>
 
 <script>
 const AB=[['for','Força'],['des','Destreza'],['con','Constituição'],['int','Inteligência'],['sab','Sabedoria'],['car','Carisma']];
 const SK=[['Acrobacia','des'],['Adestrar Animais','sab'],['Arcanismo','int'],['Atletismo','for'],['Atuação','car'],['Enganação','car'],['Furtividade','des'],['História','int'],['Intimidação','car'],['Intuição','sab'],['Investigação','int'],['Medicina','sab'],['Natureza','int'],['Percepção','sab'],['Persuasão','car'],['Prestidigitação','des'],['Religião','int'],['Sobrevivência','sab']];
 const $=s=>document.querySelector(s),sg=n=>(n>=0?'+':'')+n;
-$('#abs').innerHTML=AB.map(([k,n])=>`<div><label>${n}</label><div class="m" data-roll="${k}" id="m_${k}">+0</div><input type="number" data-k="a_${k}" value="10" min="1" max="30"></div>`).join('');
-$('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}">+0</span><span class="n">${n}</span><button class="sm" data-rsv="${k}">🎲 Rolar</button></div>`).join('');
-$('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span><button class="sm" data-rsk="${i}">🎲 Rolar</button></div>`).join('');
+$('#abs').innerHTML=AB.map(([k,n])=>`<div><label>${n}</label><div class="m" data-roll="${k}" id="m_${k}">+0</div><input type="number" data-k="a_${k}" value="10" min="1" max="30"><button class="dots" data-dots="ab:${k}" title="Mais opções" aria-label="Mais opções">⋯</button></div>`).join('');
+$('#svs').innerHTML=AB.map(([k,n])=>`<div class="row"><input type="checkbox" data-k="sp_${k}"><span class="v" id="sv_${k}">+0</span><span class="n">${n}</span><button class="sm" data-rsv="${k}">🎲 Rolar</button><button class="dots" data-dots="sv:${k}" title="Mais opções" aria-label="Mais opções">⋯</button></div>`).join('');
+$('#sks').innerHTML=SK.map(([n,a],i)=>`<div class="row"><input type="checkbox" data-k="kp_${i}"><input type="checkbox" data-k="ke_${i}"><span class="v" id="sk_${i}">+0</span><span class="n">${n} <small>(${a.toUpperCase()})</small></span><button class="sm" data-rsk="${i}">🎲 Rolar</button><button class="dots" data-dots="sk:${i}" title="Mais opções" aria-label="Mais opções">⋯</button></div>`).join('');
 $('#atks').innerHTML=[0,1,2,3].map(i=>`<div class="atk"><input data-k="at_n${i}" placeholder="Arma"><input data-k="at_b${i}" placeholder="+0"><input data-k="at_d${i}" placeholder="1d8+3 cortante"><button class="sm" data-atk="${i}">Atq</button><button class="sm" data-dmg="${i}">Dano</button></div>`).join('');
 const SLN=Array(9).fill(10); // 10 linhas de magia por nível
 $('#slots').innerHTML=SLN.map((n,idx)=>{const i=idx+1;return `<div class="sl"><div class="slh"><b>Nível ${i}</b><span><label>Usados</label><input type="number" data-k="su${i}" min="0"><label>Total</label><input type="number" data-k="st${i}" min="0"></span></div>${Array.from({length:n},(_,j)=>`<div class="ln"><input type="checkbox" class="dot" data-k="mp${i}_${j}" title="Preparada"><input data-k="mg${i}_${j}" placeholder="Magia"></div>`).join('')}</div>`}).join('');
@@ -193,6 +198,37 @@ $('#file').onchange=e=>{
 $('#clr').onclick=()=>{if(confirm('Limpar a ficha inteira?'))location.reload()};
 try{const rc=sessionStorage.getItem('fg-recover');if(rc){sessionStorage.removeItem('fg-recover');const d=JSON.parse(rc);els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]})}}catch(e){}
 calc();
+
+// ===== Rolar GM: manda só a fórmula pro Master Shield do mestre; quem rola e vê o resultado é só ele =====
+const MSG='com.gaduart.master-shield/g-',gmenu=$('#gmenu');
+let gmSel=null;
+document.addEventListener('click',e=>{
+  const t=e.target,dt=t.closest&&t.closest('[data-dots]');
+  if(dt){
+    gmSel=dt.dataset.dots;const r=dt.getBoundingClientRect();gmenu.style.display='block';
+    const w=gmenu.offsetWidth,h=gmenu.offsetHeight;
+    gmenu.style.left=Math.max(4,Math.min(innerWidth-w-4,r.right-w))+'px';
+    gmenu.style.top=Math.max(4,Math.min(innerHeight-h-4,r.bottom+2))+'px';return;
+  }
+  if(t.id=='gmgo'){gmenu.style.display='none';rollGM(gmSel);return}
+  gmenu.style.display='none';
+});
+async function rollGM(sel){
+  if(!sel)return;
+  const [ty,k]=sel.split(':');let label,bonus;
+  if(ty=='ab'){label=AB.find(a=>a[0]==k)[1];bonus=mod(k)}
+  else if(ty=='sv'){label='Salv. '+AB.find(a=>a[0]==k)[1];bonus=parseInt($('#sv_'+k).textContent)||0}
+  else{label=SK[+k][0];bonus=parseInt($('#sk_'+k).textContent)||0}
+  const ev={id:Math.random().toString(36).slice(2,10),rotulo:label,formula:'1d20'+(bonus?sg(bonus):''),mode,ts:Date.now(),pers:(V('nome').value||'').trim().slice(0,60)};
+  if(!ready){setStatus('● Conectando… envio quando conectar',false);await Promise.race([readyP,new Promise(r=>setTimeout(r,30000))])}
+  if(!ready){toast('Sem conexão com o Owlbear: não enviei ao mestre.');return}
+  try{
+    const O=window.__sdk;
+    ev.quem=((V('jogador').value||'').trim()||await O.player.getName()).slice(0,60);
+    await O.room.setMetadata({[MSG+ev.id]:ev});
+    toast('🎲 '+label+': enviado ao mestre');
+  }catch(x){toast('Não consegui enviar ao mestre: '+((x&&x.message)||'erro'))}
+}
 
 // ===== Master Shield: recebe dano rolado pelo mestre e desconta do PV =====
 //MS-START
