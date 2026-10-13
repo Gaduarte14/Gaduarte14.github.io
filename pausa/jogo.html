@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tavern Break</title>
+<style>
+:root{--bg:#14121f;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--ok:#7fc98f}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+body{display:flex;flex-direction:column;background:radial-gradient(circle at 50% 0%,#2a2540,var(--bg) 70%);color:var(--ink);font:15px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line)}
+header .t{font:700 20px Georgia,serif;color:var(--gold);margin-right:auto}
+.sc{font-size:12px;color:var(--mute);text-align:right}
+.sc b{display:block;font:700 20px Georgia,serif;color:var(--ink)}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--gold)}
+button:focus-visible{outline:2px solid var(--gold)}
+button.go{background:var(--gold);border-color:var(--gold);color:#1c1a2b;font-weight:700;font-size:17px;padding:10px 26px}
+#stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;gap:16px;padding:10px;touch-action:none}
+canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
+#side{display:none;flex-direction:column;gap:12px;align-items:center}
+#side canvas{width:84px;height:84px}
+.sbox{text-align:center;font-size:12px;color:var(--mute)}
+.sbox b{display:block;font:700 18px Georgia,serif;color:var(--ink)}
+#ov{touch-action:pan-y;position:absolute;inset:0;background:rgba(14,12,24,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;text-align:center;overflow:auto}
+#ov[hidden]{display:none}
+#ov h2{margin:0;font:700 28px Georgia,serif;color:var(--gold)}
+#ovb{font:700 44px Georgia,serif}
+#ovn{color:var(--ok);font-weight:700}
+#ovh{font-size:13px;color:var(--mute)}
+#net{font-size:12px;color:var(--mute);min-height:16px}
+#rank{width:min(300px,100%);text-align:left;font-size:14px;margin-top:4px}
+#rank h3{margin:0 0 4px;font-size:13px;color:var(--mute);font-weight:600}
+#rank ol{margin:0;padding:0 0 0 20px}
+#rank li{padding:2px 0}
+#rank li span{float:right}
+#rank li.me{color:var(--gold);font-weight:700}
+#pad{display:flex;justify-content:center;gap:10px;padding:6px 14px 12px}
+#pad button{min-width:60px;height:54px;font-size:22px;padding:0}
+</style></head><body>
+<header>
+  <div class="t" id="gname">Cobra</div>
+  <div class="sc">Pontos<b id="score">0</b></div>
+  <div class="sc">Recorde<b id="best">0</b></div>
+  <button id="exit" title="Fechar o jogo (você pode voltar pelo painel)">Sair</button>
+</header>
+<main id="stage">
+  <canvas id="cv"></canvas>
+  <div id="side">
+    <div class="sbox">Próxima<canvas id="nx" width="96" height="96"></canvas></div>
+    <div class="sbox">Nível<b id="lvl">1</b></div>
+    <div class="sbox">Linhas<b id="lns">0</b></div>
+  </div>
+  <div id="ov">
+    <h2 id="ovt"></h2>
+    <div id="ovb" hidden></div>
+    <div id="ovn" hidden>Novo recorde!</div>
+    <button class="go" id="ovgo">Jogar</button>
+    <div id="ovh"></div>
+    <div id="rank"></div>
+    <div id="net"></div>
+  </div>
+</main>
+<footer id="pad"></footer>
+<script type="module">
+const Q = new URLSearchParams(location.search);
+const G = Q.get("g") === "tetris" ? "tetris" : "snake";
+const $ = id => document.getElementById(id);
+const P = "com.gaduart.pausa/", KR = P + "r-", MID = P + "game";
+const NAMES = { snake: "Cobra", tetris: "Tetris" };
+$("gname").textContent = NAMES[G];
+document.title = "Tavern Break · " + NAMES[G];
+
+//LOGIC-START
+// ---------- Cobra ----------
+function snakeNew(n = 20) {
+  const m = n >> 1;
+  return { n, body: [{ x: m, y: m }, { x: m - 1, y: m }, { x: m - 2, y: m }], dir: { x: 1, y: 0 }, q: [], food: null, score: 0, over: false };
+}
+function snakePlaceFood(s, rnd) {
+  const free = [];
+  for (let y = 0; y < s.n; y++) for (let x = 0; x < s.n; x++) if (!s.body.some(b => b.x === x && b.y === y)) free.push({ x, y });
+  s.food = free.length ? free[Math.floor(rnd() * free.length)] : null;
+}
+function snakeTurn(s, d) {
+  const last = s.q.length ? s.q[s.q.length - 1] : s.dir;
+  if (d.x === -last.x && d.y === -last.y) return;   // não dá meia-volta
+  if (d.x === last.x && d.y === last.y) return;
+  if (s.q.length < 2) s.q.push(d);
+}
+function snakeStep(s, rnd) {
+  if (s.q.length) s.dir = s.q.shift();
+  const h = { x: s.body[0].x + s.dir.x, y: s.body[0].y + s.dir.y };
+  if (h.x < 0 || h.y < 0 || h.x >= s.n || h.y >= s.n) { s.over = true; return; }
+  const eat = !!s.food && h.x === s.food.x && h.y === s.food.y;
+  const solid = eat ? s.body : s.body.slice(0, -1);  // a ponta do rabo sai do lugar se não comer
+  if (solid.some(b => b.x === h.x && b.y === h.y)) { s.over = true; return; }
+  s.body.unshift(h);
+  if (!eat) s.body.pop();
+  else { s.score += 10; snakePlaceFood(s, rnd); if (!s.food) s.over = true; }
+}
+// ---------- Tetris ----------
+const SH = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], O: [[1,1],[1,1]], T: [[0,1,0],[1,1,1],[0,0,0]],
+  S: [[0,1,1],[1,1,0],[0,0,0]], Z: [[1,1,0],[0,1,1],[0,0,0]], J: [[1,0,0],[1,1,1],[0,0,0]], L: [[0,0,1],[1,1,1],[0,0,0]]
+};
+const COL = { I: "#4fd1d9", O: "#f0c040", T: "#a76bd9", S: "#5ec26a", Z: "#e0564f", J: "#4f7fe0", L: "#e8943a" };
+const rotCW = m => m[0].map((_, i) => m.map(r => r[i]).reverse());
+function tNew() { return { W: 10, H: 20, grid: Array.from({ length: 20 }, () => Array(10).fill(0)), bag: [], cur: null, next: null, score: 0, lines: 0, level: 1, over: false }; }
+function tBag(t, rnd) {
+  if (!t.bag.length) {
+    const k = Object.keys(SH);
+    for (let i = k.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [k[i], k[j]] = [k[j], k[i]]; }
+    t.bag = k;
+  }
+  return t.bag.pop();
+}
+function tHit(t, m, x, y) {
+  for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) if (m[r][c]) {
+    const nx = x + c, ny = y + r;
+    if (nx < 0 || nx >= t.W || ny >= t.H) return true;
+    if (ny >= 0 && t.grid[ny][nx]) return true;
+  }
+  return false;
+}
+function tSpawn(t, rnd) {
+  const k = t.next || tBag(t, rnd);
+  t.next = tBag(t, rnd);
+  const m = SH[k].map(r => r.slice());
+  t.cur = { k, m, x: Math.floor((t.W - m[0].length) / 2), y: 0 };
+  if (tHit(t, t.cur.m, t.cur.x, t.cur.y)) t.over = true;
+}
+function tMove(t, dx, dy) {
+  if (t.over || !t.cur) return false;
+  if (tHit(t, t.cur.m, t.cur.x + dx, t.cur.y + dy)) return false;
+  t.cur.x += dx; t.cur.y += dy; return true;
+}
+function tRotate(t) {
+  if (t.over || !t.cur) return false;
+  const m = rotCW(t.cur.m);
+  for (const k of [0, -1, 1, -2, 2]) if (!tHit(t, m, t.cur.x + k, t.cur.y)) { t.cur.m = m; t.cur.x += k; return true; }
+  return false;
+}
+function tLock(t, rnd) {
+  const { m, x, y, k } = t.cur;
+  for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) if (m[r][c] && y + r >= 0) t.grid[y + r][x + c] = k;
+  const keep = t.grid.filter(row => row.some(v => !v));
+  const n = t.H - keep.length;
+  if (n) {
+    t.grid = [...Array.from({ length: n }, () => Array(t.W).fill(0)), ...keep];
+    t.score += [0, 100, 300, 500, 800][n] * t.level;
+    t.lines += n; t.level = 1 + Math.floor(t.lines / 10);
+  }
+  tSpawn(t, rnd);
+}
+function tDrop(t, rnd) { let n = 0; while (tMove(t, 0, 1)) n++; t.score += 2 * n; tLock(t, rnd); return n; }
+function tTick(t, rnd) { if (!tMove(t, 0, 1)) tLock(t, rnd); }
+function tGhostY(t) { let y = t.cur.y; while (!tHit(t, t.cur.m, t.cur.x, y + 1)) y++; return y; }
+//LOGIC-END
+
+// ---------- estado e recordes ----------
+const rnd = Math.random;
+const cv = $("cv"), cx = cv.getContext("2d"), nx = $("nx").getContext("2d");
+const ov = $("ov");
+let state = "ready", S = null, acc = 0, last = 0;
+let OBR = null, MY = { id: null, name: "Jogador" }, board = {}, dirty = false, exitWanted = false;
+const loc = g => { try { return +localStorage.getItem("pz-best-" + g) || 0; } catch { return 0; } };
+const saveLoc = (g, v) => { try { localStorage.setItem("pz-best-" + g, v); } catch {} };
+let bestV = loc(G);
+$("best").textContent = bestV;
+
+function readBoard(m) {
+  const b = {};
+  for (const [k, v] of Object.entries(m || {})) if (k.startsWith(KR) && v && typeof v === "object") b[k.slice(KR.length)] = v;
+  board = b;
+  const mine = MY.id && board[MY.id];
+  if (mine && mine[G] > bestV) { bestV = mine[G]; saveLoc(G, bestV); $("best").textContent = bestV; }
+  if (!ov.hidden) renderRank();
+}
+async function flush() {
+  if (!dirty || !OBR || !MY.id) return;
+  dirty = false;
+  const cur = board[MY.id] || {};
+  const rec = { n: MY.name, snake: Math.max(cur.snake || 0, loc("snake")), tetris: Math.max(cur.tetris || 0, loc("tetris")), ts: Date.now() };
+  board[MY.id] = rec;
+  try { await OBR.room.setMetadata({ [KR + MY.id]: rec }); } catch { dirty = true; }
+  if (!ov.hidden) renderRank();
+}
+function renderRank() {
+  const r = $("rank"); r.textContent = "";
+  const rows = Object.entries(board).filter(([, e]) => e[G] > 0).sort((a, b) => b[1][G] - a[1][G]).slice(0, 5);
+  const h = document.createElement("h3"); h.textContent = "Melhores de " + NAMES[G]; r.append(h);
+  if (!rows.length) { const p = document.createElement("div"); p.style.color = "var(--mute)"; p.textContent = "Ninguém pontuou ainda."; r.append(p); return; }
+  const ol = document.createElement("ol");
+  for (const [id, e] of rows) {
+    const li = document.createElement("li"); if (id === MY.id) li.className = "me";
+    li.textContent = String(e.n || "Jogador").slice(0, 24);
+    const sp = document.createElement("span"); sp.textContent = e[G]; li.append(sp); ol.append(li);
+  }
+  r.append(ol);
+}
+
+// ---------- conexão com o Owlbear (opcional: o jogo funciona sem) ----------
+(async () => {
+  let O;
+  for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+    try { O = (await import(u)).default; break; } catch (e) {}
+  }
+  const bad = () => { if (!OBR) $("net").textContent = "Sem conexão com o Owlbear: o recorde fica salvo só neste aparelho."; };
+  if (!O) { bad(); return; }
+  $("net").textContent = "Conectando pra sincronizar os recordes…";
+  const t = setTimeout(bad, 15000);
+  O.onReady(async () => {
+    clearTimeout(t); OBR = O; $("net").textContent = "";
+    try { MY.id = await O.player.getId(); MY.name = (await O.player.getName()) || "Jogador"; } catch {}
+    try { readBoard(await O.room.getMetadata()); O.room.onMetadataChange(readBoard); } catch {}
+    const remote = ((board[MY.id] || {})[G]) || 0;
+    if (MY.id && loc(G) > remote) { dirty = true; flush(); }
+    if (exitWanted) { try { await O.modal.close(MID); } catch {} }
+    if (!ov.hidden) renderRank();
+  });
+})();
+
+$("exit").onclick = async () => {
+  if (OBR) { try { await OBR.modal.close(MID); } catch {} }
+  else { exitWanted = true; $("net").textContent = "Conectando… fecho assim que conectar."; }
+};
+
+// ---------- desenho ----------
+function rr(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); g.fill(); }
+function drawSnake() {
+  const g = cx, c = 24;
+  g.fillStyle = "#0e0c18"; g.fillRect(0, 0, 480, 480);
+  g.fillStyle = "#16142a";
+  for (let y = 0; y < 20; y++) for (let x = 0; x < 20; x++) if ((x + y) % 2 === 0) g.fillRect(x * c, y * c, c, c);
+  if (!S) return;
+  if (S.food) { g.fillStyle = "#e0564f"; g.beginPath(); g.arc(S.food.x * c + c / 2, S.food.y * c + c / 2, c * 0.36, 0, 7); g.fill(); }
+  S.body.forEach((b, i) => { g.fillStyle = i === 0 ? "#f0c24f" : "#c98f2f"; rr(g, b.x * c + 1, b.y * c + 1, c - 2, c - 2, 6); });
+}
+function cell(g, x, y, col, a = 1, c = 24) { g.globalAlpha = a; g.fillStyle = col; rr(g, x * c + 1, y * c + 1, c - 2, c - 2, 4); g.globalAlpha = 1; }
+function drawTet() {
+  const g = cx;
+  g.fillStyle = "#0e0c18"; g.fillRect(0, 0, 240, 480);
+  g.strokeStyle = "#1b1830"; g.lineWidth = 1; g.beginPath();
+  for (let x = 1; x < 10; x++) { g.moveTo(x * 24, 0); g.lineTo(x * 24, 480); }
+  for (let y = 1; y < 20; y++) { g.moveTo(0, y * 24); g.lineTo(240, y * 24); }
+  g.stroke();
+  nx.clearRect(0, 0, 96, 96);
+  if (!S) return;
+  S.grid.forEach((row, y) => row.forEach((v, x) => { if (v) cell(g, x, y, COL[v]); }));
+  if (S.cur && !S.over) {
+    const gy = tGhostY(S);
+    S.cur.m.forEach((row, r) => row.forEach((v, c) => { if (v) { cell(g, S.cur.x + c, gy + r, COL[S.cur.k], 0.2); cell(g, S.cur.x + c, S.cur.y + r, COL[S.cur.k]); } }));
+  }
+  if (S.next) {
+    const m = SH[S.next], ox = (4 - m[0].length) / 2, oy = (4 - m.length) / 2;
+    m.forEach((row, r) => row.forEach((v, c) => { if (v) cell(nx, ox + c, oy + r, COL[S.next]); }));
+  }
+}
+function hud() {
+  if (!S) return;
+  $("score").textContent = S.score;
+  if (G === "tetris") { $("lvl").textContent = S.level; $("lns").textContent = S.lines; }
+}
+function fit() {
+  const st = $("stage"), side = G === "tetris" ? 120 : 0;
+  const k = Math.max(0.2, Math.min((st.clientWidth - 20 - side) / cv.width, (st.clientHeight - 20) / cv.height));
+  cv.style.width = cv.width * k + "px"; cv.style.height = cv.height * k + "px";
+}
+
+// ---------- fluxo do jogo ----------
+function showOv(kind, isNew) {
+  ov.hidden = false;
+  $("ovt").textContent = kind === "ready" ? NAMES[G] : "Fim de jogo";
+  $("ovb").hidden = kind === "ready"; if (kind !== "ready") $("ovb").textContent = S.score + " pontos";
+  $("ovn").hidden = !isNew;
+  $("ovgo").textContent = kind === "ready" ? "Jogar" : "Jogar de novo";
+  renderRank();
+  $("ovgo").focus();
+}
+function start() {
+  if (state === "play") return;
+  if (G === "snake") { S = snakeNew(20); snakePlaceFood(S, rnd); } else { S = tNew(); tSpawn(S, rnd); }
+  state = "play"; ov.hidden = true; acc = 0; last = performance.now();
+  $("score").textContent = 0; hud();
+  window.focus();
+}
+function over() {
+  state = "over";
+  const isNew = S.score > bestV;
+  if (isNew) { bestV = S.score; saveLoc(G, bestV); $("best").textContent = bestV; dirty = true; flush(); }
+  hud(); showOv("over", isNew);
+}
+function step() {
+  if (G === "snake") snakeStep(S, rnd); else tTick(S, rnd);
+  if (S.over) over();
+}
+function act(a) {
+  if (state !== "play") return;
+  if (G === "snake") {
+    const d = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }[a];
+    if (d) snakeTurn(S, d);
+  } else {
+    if (a === "left") tMove(S, -1, 0);
+    else if (a === "right") tMove(S, 1, 0);
+    else if (a === "rot") tRotate(S);
+    else if (a === "down") { if (tMove(S, 0, 1)) { S.score += 1; acc = 0; } }
+    else if (a === "drop") { tDrop(S, rnd); acc = 0; }
+    if (S.over) over();
+  }
+  hud();
+}
+function loop(ts) {
+  if (state === "play") {
+    acc += Math.min(250, ts - last);
+    const iv = G === "snake" ? Math.max(65, 140 - Math.floor(S.score / 10) * 3) : Math.max(90, 800 - (S.level - 1) * 65);
+    while (acc >= iv && state === "play") { acc -= iv; step(); }
+    hud();
+  }
+  last = ts;
+  if (G === "snake") drawSnake(); else drawTet();
+  requestAnimationFrame(loop);
+}
+
+// ---------- controles ----------
+const KEYS = {
+  ArrowUp: "up", w: "up", W: "up", ArrowDown: "down", s: "down", S: "down",
+  ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right"
+};
+addEventListener("keydown", e => {
+  const k = e.key;
+  if (state !== "play") { if (k === "Enter" || k === " ") { e.preventDefault(); start(); } return; }
+  if (k === " ") { e.preventDefault(); if (G === "tetris") act("drop"); return; }
+  let a = KEYS[k];
+  if (!a) return;
+  e.preventDefault();
+  if (G === "tetris" && a === "up") a = "rot";
+  act(a);
+});
+$("ovgo").onclick = () => { if (state !== "play") start(); };
+
+(function bindPad() {
+  const pad = $("pad");
+  const defs = G === "snake" ? [["left", "◀"], ["up", "▲"], ["down", "▼"], ["right", "▶"]]
+    : [["left", "◀"], ["rot", "⟳"], ["right", "▶"], ["down", "▼"], ["drop", "⤓"]];
+  for (const [a, l] of defs) {
+    const b = document.createElement("button"); b.textContent = l; b.setAttribute("aria-label", a);
+    const rep = G === "tetris" && (a === "left" || a === "right" || a === "down");
+    let t1 = null, t2 = null;
+    const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    b.addEventListener("pointerdown", e => { e.preventDefault(); act(a); if (rep) t1 = setTimeout(() => { t2 = setInterval(() => act(a), 90); }, 240); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener("contextmenu", e => e.preventDefault());
+    pad.append(b);
+  }
+  if (G === "tetris") $("side").style.display = "flex";
+  // gestos: cobra = deslizar pra virar; tetris = arrastar move, toque gira, puxar rápido pra baixo derruba
+  const st = $("stage");
+  let g = null;
+  const cellPx = () => cv.getBoundingClientRect().width / (G === "snake" ? 20 : 10);
+  st.addEventListener("pointerdown", e => {
+    if (state !== "play" || e.target.closest("button")) return;
+    g = { id: e.pointerId, ax: e.clientX, ay: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
+    try { st.setPointerCapture(e.pointerId); } catch {}
+    e.preventDefault();
+  });
+  st.addEventListener("pointermove", e => {
+    if (!g || e.pointerId !== g.id || state !== "play") return;
+    if (G === "snake") {
+      const dx = e.clientX - g.ax, dy = e.clientY - g.ay;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+      act(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+      g.ax = e.clientX; g.ay = e.clientY; g.moved = true;
+    } else {
+      const c = cellPx();
+      while (Math.abs(e.clientX - g.ax) >= c) { const d = Math.sign(e.clientX - g.ax); act(d > 0 ? "right" : "left"); g.ax += d * c; g.moved = true; }
+      while (e.clientY - g.ay >= c) { act("down"); g.ay += c; g.moved = true; }
+    }
+  });
+  const endG = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dt = performance.now() - g.t0, dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+    if (G === "tetris" && state === "play" && e.type === "pointerup") {
+      if (!g.moved && Math.hypot(dx, dy) < 12 && dt < 300) act("rot");
+      else if (dy > 90 && dt < 260 && Math.abs(dx) < dy / 2) act("drop");
+    }
+    g = null;
+  };
+  st.addEventListener("pointerup", endG);
+  st.addEventListener("pointercancel", endG);
+})();
+
+cv.width = G === "snake" ? 480 : 240; cv.height = 480;
+$("ovh").textContent = G === "snake" ? "Setas, WASD ou deslize o dedo na tela" : "← → mover · ↑ girar · ↓ descer · espaço: cair de vez\nNo celular: arraste pra mover, toque pra girar, puxe rápido pra baixo pra derrubar";
+$("ovh").style.whiteSpace = "pre-line";
+addEventListener("resize", fit); fit();
+showOv("ready", false);
+requestAnimationFrame(loop);
+</script></body></html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tavern Break</title>
+<style>
+:root{--bg:#14121f;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--ok:#7fc98f;--bad:#e0564f}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(circle at 50% 0%,#2a2540,var(--bg) 70%);color:var(--ink);font:14px/1.4 system-ui,sans-serif;padding:14px;overflow-y:auto}
+h1{margin:0;font:700 20px Georgia,serif;color:var(--gold)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.chip{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.chip.on{color:#1c1a2b;background:var(--gold);border-color:var(--gold);font-weight:700}
+h2{margin:14px 0 6px;font-size:12px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.06em}
+.games{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;font:inherit;color:var(--ink)}
+.card:hover{border-color:var(--mute)}
+.card[aria-pressed="true"]{border-color:var(--gold);box-shadow:0 0 0 2px rgba(224,164,74,.25)}
+.card:disabled{opacity:.55;cursor:default}
+.card .e{font-size:30px;display:block}
+.card b{display:block;font:700 16px Georgia,serif;margin-top:2px}
+.card small{color:var(--mute);font-size:11px}
+.card .live{display:none;color:var(--ok);font-size:11px;font-weight:700}
+.card.cur .live{display:block}
+button.act{width:100%;margin-top:10px;font:inherit;font-weight:700;font-size:15px;padding:12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button.act:hover:not(:disabled){border-color:var(--gold)}
+button.act:disabled{opacity:.5;cursor:default}
+button.act.pri{background:var(--gold);border-color:var(--gold);color:#1c1a2b}
+button.act.stop{background:var(--ok);border-color:var(--ok);color:#10281a}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.note{margin-top:8px;font-size:12px;color:var(--mute);min-height:16px}
+.rank{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rank div{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;padding:8px}
+.rank h3{margin:0 0 4px;font-size:12px;color:var(--mute);font-weight:600}
+.rank ol{margin:0;padding:0 0 0 18px;font-size:13px}
+.rank li span{float:right;color:var(--gold)}
+.rank .none{font-size:12px;color:var(--mute)}
+[hidden]{display:none!important}
+</style></head><body>
+<div class="top"><h1>🍺 Tavern Break</h1><span class="chip" id="chip">Conectando…</span></div>
+
+<h2 id="hgame">Escolha o jogo</h2>
+<div class="games">
+  <button class="card" id="c-snake" data-g="snake" aria-pressed="false"><span class="e">🐍</span><b>Cobra</b><small>Deslize o dedo</small><span class="live">● em jogo</span></button>
+  <button class="card" id="c-tetris" data-g="tetris" aria-pressed="false"><span class="e">🧱</span><b>Tetris</b><small>Arraste e toque</small><span class="live">● em jogo</span></button>
+</div>
+
+<div id="gm" hidden>
+  <button class="act pri" id="start">⏸ Pausar a mesa e começar</button>
+  <button class="act" id="restart" hidden>🔄 Reiniciar para todos</button>
+  <button class="act stop" id="resume" hidden>▶ Retomar o RPG</button>
+</div>
+<button class="act" id="mine" hidden>🎮 Jogar também (só pra mim)</button>
+<div class="note" id="note"></div>
+
+<h2>Melhores pontuações</h2>
+<div class="rank" id="rank"></div>
+
+<script type="module">
+const P = "com.gaduart.pausa/", KS = P + "state", KR = P + "r-", MID = P + "game";
+const $ = id => document.getElementById(id);
+const NAMES = { snake: "Cobra", tetris: "Tetris" };
+let OBR = null, role = null, myId = null, sel = "snake", st = { on: false }, board = {}, busy = false;
+
+function setNote(t) { $("note").textContent = t || ""; }
+
+function render() {
+  const on = !!(st && st.on && st.game), cur = on ? st.game : null, gm = role === "GM";
+  const chip = $("chip");
+  chip.textContent = !OBR ? "Conectando…" : on ? "⏸ Em pausa · " + NAMES[cur] : "RPG rolando";
+  chip.className = "chip" + (on ? " on" : "");
+  for (const g of ["snake", "tetris"]) {
+    const c = $("c-" + g);
+    c.setAttribute("aria-pressed", String(g === sel));
+    c.classList.toggle("cur", g === cur);
+    c.disabled = !gm || !OBR;
+  }
+  $("gm").hidden = !(gm && OBR);
+  $("start").hidden = on;
+  $("start").textContent = "⏸ Pausar a mesa e começar " + NAMES[sel];
+  $("restart").hidden = !on;
+  $("restart").textContent = sel === cur ? "🔄 Reiniciar para todos" : "🔄 Trocar para " + NAMES[sel];
+  $("resume").hidden = !on;
+  $("hgame").textContent = gm ? "Escolha o jogo" : "Jogos";
+  const mine = $("mine");
+  mine.hidden = !OBR || (!gm && !on);
+  mine.textContent = gm ? "🎮 Jogar também (só pra mim)" : "🎮 Voltar ao jogo";
+  if (OBR && !gm) setNote(on ? "O mestre pausou a mesa. Se fechou o jogo, é só voltar por aqui." : "Só o mestre pausa a mesa e escolhe o jogo.");
+  renderRank();
+}
+
+function renderRank() {
+  const box = $("rank"); box.textContent = "";
+  for (const g of ["snake", "tetris"]) {
+    const d = document.createElement("div");
+    const h = document.createElement("h3"); h.textContent = NAMES[g]; d.append(h);
+    const rows = Object.values(board).filter(e => e[g] > 0).sort((a, b) => b[g] - a[g]).slice(0, 3);
+    if (!rows.length) { const n = document.createElement("div"); n.className = "none"; n.textContent = "Ninguém ainda"; d.append(n); }
+    else {
+      const ol = document.createElement("ol");
+      for (const e of rows) {
+        const li = document.createElement("li"); li.textContent = String(e.n || "Jogador").slice(0, 14);
+        const sp = document.createElement("span"); sp.textContent = e[g]; li.append(sp); ol.append(li);
+      }
+      d.append(ol);
+    }
+    box.append(d);
+  }
+}
+
+function onMeta(m) {
+  const s = m && m[KS];
+  st = s && typeof s === "object" ? s : { on: false };
+  const b = {};
+  for (const [k, v] of Object.entries(m || {})) if (k.startsWith(KR) && v && typeof v === "object") b[k.slice(KR.length)] = v;
+  board = b;
+  render();
+}
+
+async function setState(next) {
+  if (busy) return; busy = true;
+  try { await OBR.room.setMetadata({ [KS]: next }); setNote(""); }
+  catch { setNote("Não consegui falar com a sala. Tenta de novo."); }
+  busy = false;
+}
+
+for (const g of ["snake", "tetris"]) $("c-" + g).onclick = () => { sel = g; render(); };
+$("start").onclick = () => setState({ on: true, game: sel, run: Date.now() });
+$("restart").onclick = () => setState({ on: true, game: sel, run: Date.now() });
+$("resume").onclick = () => setState({ on: false });
+$("mine").onclick = async () => {
+  const g = role === "GM" ? sel : (st.game || "snake"), run = role === "GM" ? Date.now() : (st.run || 0);
+  try { await OBR.modal.close(MID); } catch {}
+  try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(g) + "&run=" + run, fullScreen: true, hidePaper: true }); }
+  catch { setNote("Não consegui abrir o jogo."); }
+};
+
+render();
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) {}
+}
+if (!OBR) { $("chip").textContent = "Sem conexão"; setNote("Não carreguei o Owlbear. Recarrega a extensão."); }
+else {
+  const ready = OBR;
+  OBR = null;
+  ready.onReady(async () => {
+    OBR = ready;
+    try { role = await ready.player.getRole(); myId = await ready.player.getId(); } catch {}
+    try { ready.player.onChange(p => { if (p && p.role !== role) { role = p.role; render(); } }); } catch {}
+    try { onMeta(await ready.room.getMetadata()); ready.room.onMetadataChange(onMeta); } catch { render(); }
+    if (st && st.on && st.game) sel = st.game;
+    render();
+  });
+}
+</script></body></html>
