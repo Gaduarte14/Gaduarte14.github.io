@@ -1,45 +1,53 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>Tavern Break (fundo)</title></head><body>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Tavern Break (fundo)</title>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm">
 <script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+window.__sdk = OBR;
+OBR.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); });
+</script>
+</head><body>
+<script>
 // Roda em segundo plano pra todo mundo: abre o minigame em tela cheia pros jogadores quando o mestre escolhe.
 const P = "com.gaduart.pausa/", KS = P + "state", MID = P + "game";
 const tries = (() => { try { return +sessionStorage.getItem("pz-bg-tries") || 0; } catch { return 0; } })();
-let ready = false;
-const dog = setTimeout(() => {
+let ready = false, OBR = null, role = null, cur = null, wasOn = false, q = Promise.resolve();
+
+const apply = async m => {
+  const s = m && m[KS], on = !!(s && s.on);
+  if (on && !wasOn && role !== "GM") { try { OBR.notification.show("⏸ O RPG está em pausa"); } catch {} }
+  const ended = wasOn && !on;
+  wasOn = on;
+  if (role === "GM") {                       // o mestre nunca é puxado pra tela cheia; só fecha ao retomar
+    if (ended) { try { await OBR.modal.close(MID); } catch {} }
+    return;
+  }
+  const want = on && s.game ? s.game + ":" + s.run : null;
+  if (want === cur) return;
+  cur = want;
+  try { await OBR.modal.close(MID); } catch {}
+  if (want) {
+    try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, fullScreen: true, hidePaper: true }); } catch {}
+  }
+};
+const go = m => { q = q.then(() => apply(m)).catch(() => {}); };
+
+async function onSdkReady() {
+  if (ready) return;
+  ready = true; OBR = window.__sdk;
+  try { sessionStorage.removeItem("pz-bg-tries"); } catch {}
+  role = await OBR.player.getRole();
+  go(await OBR.room.getMetadata());
+  OBR.room.onMetadataChange(go);
+}
+if (window.__sdkReady) onSdkReady(); else addEventListener("sdkready", onSdkReady);
+
+setTimeout(async () => {   // se o SDK principal não baixar em 6s, tenta o link reserva
+  if (window.__sdk || ready) return;
+  try { const o = (await import("https://esm.sh/@owlbear-rodeo/sdk@3")).default; window.__sdk = o; o.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); }); } catch {}
+}, 6000);
+setTimeout(() => {   // se o Owlbear não responder em 12s, recarrega (até 2 vezes)
   if (ready) return;
   if (tries < 2) { try { sessionStorage.setItem("pz-bg-tries", tries + 1); } catch {} location.reload(); }
 }, 12000);
-
-let OBR;
-for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
-  try { OBR = (await import(u)).default; break; } catch (e) {}
-}
-if (OBR) {
-  let role = null, cur = null, wasOn = false, q = Promise.resolve();
-  const apply = async m => {
-    const s = m && m[KS], on = !!(s && s.on);
-    if (on && !wasOn && role !== "GM") { try { OBR.notification.show("⏸ O RPG está em pausa"); } catch {} }
-    const ended = wasOn && !on;
-    wasOn = on;
-    if (role === "GM") {                       // o mestre nunca é puxado pra tela cheia; só fecha ao retomar
-      if (ended) { try { await OBR.modal.close(MID); } catch {} }
-      return;
-    }
-    const want = on && s.game ? s.game + ":" + s.run : null;
-    if (want === cur) return;
-    cur = want;
-    try { await OBR.modal.close(MID); } catch {}
-    if (want) {
-      try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, fullScreen: true, hidePaper: true }); } catch {}
-    }
-  };
-  const go = m => { q = q.then(() => apply(m)).catch(() => {}); };
-  OBR.onReady(async () => {
-    ready = true; clearTimeout(dog);
-    try { sessionStorage.removeItem("pz-bg-tries"); } catch {}
-    role = await OBR.player.getRole();
-    go(await OBR.room.getMetadata());
-    OBR.room.onMetadataChange(go);
-  });
-}
 </script></body></html>

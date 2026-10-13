@@ -2,6 +2,12 @@
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tavern Break</title>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm">
+<script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+window.__sdk = OBR;
+OBR.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); });
+</script>
 <style>
 :root{--bg:#14121f;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--ok:#7fc98f;--bad:#e0564f}
 *{box-sizing:border-box}
@@ -52,22 +58,24 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 </div>
 <button class="act" id="mine" hidden>🎮 Jogar também (só pra mim)</button>
 <div class="note" id="note"></div>
+<button class="act" id="retry" hidden>↻ Tentar de novo</button>
 
 <h2>Melhores pontuações</h2>
 <div class="rank" id="rank"></div>
 
-<script type="module">
+<script>
 const P = "com.gaduart.pausa/", KS = P + "state", KR = P + "r-", MID = P + "game";
 const $ = id => document.getElementById(id);
 const NAMES = { snake: "Cobra", tetris: "Tetris" };
-let OBR = null, role = null, myId = null, sel = "snake", st = { on: false }, board = {}, busy = false;
+let OBR = null, role = null, myId = null, sel = "snake", st = { on: false }, board = {}, busy = false, ready = false, status = "Conectando…";
+try { if (sessionStorage.getItem("tb-sel") === "tetris") sel = "tetris"; } catch {}
 
 function setNote(t) { $("note").textContent = t || ""; }
 
 function render() {
   const on = !!(st && st.on && st.game), cur = on ? st.game : null, gm = role === "GM";
   const chip = $("chip");
-  chip.textContent = !OBR ? "Conectando…" : on ? "⏸ Em pausa · " + NAMES[cur] : "RPG rolando";
+  chip.textContent = !ready ? status : on ? "⏸ Em pausa · " + NAMES[cur] : "RPG rolando";
   chip.className = "chip" + (on ? " on" : "");
   for (const g of ["snake", "tetris"]) {
     const c = $("c-" + g);
@@ -124,7 +132,7 @@ async function setState(next) {
   busy = false;
 }
 
-for (const g of ["snake", "tetris"]) $("c-" + g).onclick = () => { sel = g; render(); };
+for (const g of ["snake", "tetris"]) $("c-" + g).onclick = () => { sel = g; try { sessionStorage.setItem("tb-sel", g); } catch {} render(); };
 $("start").onclick = () => setState({ on: true, game: sel, run: Date.now() });
 $("restart").onclick = () => setState({ on: true, game: sel, run: Date.now() });
 $("resume").onclick = () => setState({ on: false });
@@ -135,21 +143,34 @@ $("mine").onclick = async () => {
   catch { setNote("Não consegui abrir o jogo."); }
 };
 
+
+// ---------- conexão com o Owlbear (SDK carregado no <head>, com link reserva e recarga automática) ----------
+const tries = (() => { try { return +sessionStorage.getItem("tb-tries") || 0; } catch { return 0; } })();
+const setStatus = t => { status = t; if (!ready) render(); };
+async function onSdkReady() {
+  if (ready) return;
+  ready = true; OBR = window.__sdk;
+  try { sessionStorage.removeItem("tb-tries"); } catch {}
+  $("retry").hidden = true; setNote("");
+  try { role = await OBR.player.getRole(); myId = await OBR.player.getId(); } catch {}
+  try { OBR.player.onChange(p => { if (p && p.role !== role) { role = p.role; render(); } }); } catch {}
+  try { onMeta(await OBR.room.getMetadata()); OBR.room.onMetadataChange(onMeta); } catch { render(); }
+  if (st && st.on && st.game) sel = st.game;
+  render();
+}
+if (window.__sdkReady) onSdkReady(); else addEventListener("sdkready", onSdkReady);
+setTimeout(async () => {   // se o SDK principal não baixar em 6s, tenta o link reserva
+  if (window.__sdk || ready) return;
+  try { const o = (await import("https://esm.sh/@owlbear-rodeo/sdk@3")).default; window.__sdk = o; o.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); }); } catch {}
+}, 6000);
+setTimeout(() => { if (!ready) setStatus(window.__sdk ? "Aguardando o Owlbear…" : "Baixando o SDK…"); }, 3000);
+setTimeout(() => {   // se o Owlbear não responder em 12s, recarrega (até 2 vezes)
+  if (ready) return;
+  if (tries < 2) { try { sessionStorage.setItem("tb-tries", tries + 1); } catch {} location.reload(); return; }
+  setStatus("Sem conexão");
+  setNote(window.__sdk ? "O Owlbear não respondeu." : "Não consegui baixar o SDK (rede).");
+  $("retry").hidden = false;
+}, 12000);
+$("retry").onclick = () => { try { sessionStorage.removeItem("tb-tries"); } catch {} location.reload(); };
 render();
-for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
-  try { OBR = (await import(u)).default; break; } catch (e) {}
-}
-if (!OBR) { $("chip").textContent = "Sem conexão"; setNote("Não carreguei o Owlbear. Recarrega a extensão."); }
-else {
-  const ready = OBR;
-  OBR = null;
-  ready.onReady(async () => {
-    OBR = ready;
-    try { role = await ready.player.getRole(); myId = await ready.player.getId(); } catch {}
-    try { ready.player.onChange(p => { if (p && p.role !== role) { role = p.role; render(); } }); } catch {}
-    try { onMeta(await ready.room.getMetadata()); ready.room.onMetadataChange(onMeta); } catch { render(); }
-    if (st && st.on && st.game) sel = st.game;
-    render();
-  });
-}
 </script></body></html>

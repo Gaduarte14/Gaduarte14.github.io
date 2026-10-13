@@ -2,6 +2,12 @@
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Tavern Break</title>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm">
+<script type="module">
+import OBR from "https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm";
+window.__sdk = OBR;
+OBR.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); });
+</script>
 <style>
 :root{--bg:#14121f;--panel:#27243b;--line:#3b3757;--ink:#ece8f5;--mute:#9c97b5;--gold:#e0a44a;--ok:#7fc98f}
 *{box-sizing:border-box}
@@ -200,25 +206,36 @@ function renderRank() {
 }
 
 // ---------- conexão com o Owlbear (opcional: o jogo funciona sem) ----------
-(async () => {
-  let O;
-  for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
-    try { O = (await import(u)).default; break; } catch (e) {}
-  }
-  const bad = () => { if (!OBR) $("net").textContent = "Sem conexão com o Owlbear: o recorde fica salvo só neste aparelho."; };
-  if (!O) { bad(); return; }
-  $("net").textContent = "Conectando pra sincronizar os recordes…";
-  const t = setTimeout(bad, 15000);
-  O.onReady(async () => {
-    clearTimeout(t); OBR = O; $("net").textContent = "";
-    try { MY.id = await O.player.getId(); MY.name = (await O.player.getName()) || "Jogador"; } catch {}
-    try { readBoard(await O.room.getMetadata()); O.room.onMetadataChange(readBoard); } catch {}
-    const remote = ((board[MY.id] || {})[G]) || 0;
-    if (MY.id && loc(G) > remote) { dirty = true; flush(); }
-    if (exitWanted) { try { await O.modal.close(MID); } catch {} }
-    if (!ov.hidden) renderRank();
-  });
-})();
+// O SDK é carregado no <head> (window.__sdk); aqui esperamos ficar pronto, com link reserva e recarga automática.
+let up = false;
+const tries = (() => { try { return +sessionStorage.getItem("tb-tries") || 0; } catch { return 0; } })();
+const netMsg = t => { if (!OBR) $("net").textContent = t; };
+async function connected(O) {
+  OBR = O; $("net").textContent = "";
+  try { sessionStorage.removeItem("tb-tries"); } catch {}
+  try { MY.id = await O.player.getId(); MY.name = (await O.player.getName()) || "Jogador"; } catch {}
+  try { readBoard(await O.room.getMetadata()); O.room.onMetadataChange(readBoard); } catch {}
+  const remote = ((board[MY.id] || {})[G]) || 0;
+  if (MY.id && loc(G) > remote) { dirty = true; flush(); }
+  if (exitWanted) { try { await O.modal.close(MID); } catch {} }
+  if (!ov.hidden) renderRank();
+}
+const onUp = () => { if (up) return; up = true; connected(window.__sdk); };
+$("net").textContent = "Conectando pra sincronizar os recordes…";
+if (window.__sdkReady) onUp(); else addEventListener("sdkready", onUp);
+setTimeout(async () => {   // se o SDK principal não baixar em 6s, tenta o link reserva
+  if (window.__sdk || up) return;
+  try { const o = (await import("https://esm.sh/@owlbear-rodeo/sdk@3")).default; window.__sdk = o; o.onReady(() => { window.__sdkReady = true; dispatchEvent(new Event("sdkready")); }); } catch {}
+}, 6000);
+setTimeout(() => { if (!up) netMsg(window.__sdk ? "Conectando… aguardando o Owlbear." : "Conectando… baixando o SDK do Owlbear."); }, 3000);
+setTimeout(() => {
+  if (up) return;
+  if (tries < 2 && state !== "play") { try { sessionStorage.setItem("tb-tries", tries + 1); } catch {} location.reload(); return; }
+  netMsg("Sem conexão com o Owlbear: o recorde fica salvo só neste aparelho. ");
+  const b = document.createElement("button"); b.textContent = "Tentar de novo";
+  b.onclick = () => { try { sessionStorage.removeItem("tb-tries"); } catch {} location.reload(); };
+  $("net").append(b);
+}, 12000);
 
 $("exit").onclick = async () => {
   if (OBR) { try { await OBR.modal.close(MID); } catch {} }
