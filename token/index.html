@@ -46,7 +46,7 @@ canvas{width:100%;height:100%;display:block}
     <input type="file" id="file" accept="image/*" class="hide">
 
     <label for="zoom">Zoom</label>
-    <div class="row"><input type="range" id="zoom" min="100" max="400" value="100"><output id="zoomO">100%</output></div>
+    <div class="row"><input type="range" id="zoom" min="25" max="400" value="100"><output id="zoomO">100%</output></div>
     <label for="oy">Posição vertical (cima / baixo)</label>
     <div class="row"><input type="range" id="oy" min="-100" max="100" value="0"><output id="oyO">0</output></div>
     <label for="ox">Posição horizontal</label>
@@ -142,7 +142,7 @@ view.onpointermove=e=>{
   $('ox').value=st.ox;$('oy').value=st.oy;sync();draw();
 };
 view.onpointerup=view.onpointercancel=()=>drag=null;
-view.onwheel=e=>{e.preventDefault();st.zoom=clamp(st.zoom*(e.deltaY<0?1.06:0.94),1,4);$('zoom').value=st.zoom*100;sync();draw()};
+view.onwheel=e=>{e.preventDefault();st.zoom=clamp(st.zoom*(e.deltaY<0?1.06:0.94),0.25,4);$('zoom').value=st.zoom*100;sync();draw()};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
 // desenho
