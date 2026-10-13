@@ -1,0 +1,15 @@
+{
+  "name": "Token Forge",
+  "version": "1.0",
+  "manifest_version": 1,
+  "description": "Crie tokens com borda, zoom e posição ajustáveis e baixe em PNG.",
+  "author": "Gaduart",
+  "icon": "/cover.png",
+  "action": {
+    "title": "Token Forge",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "height": 640,
+    "width": 840
+  }
+}
