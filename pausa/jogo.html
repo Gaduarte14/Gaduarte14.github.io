@@ -45,6 +45,7 @@ canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
 </style></head><body>
 <header>
   <div class="t" id="gname">Cobra</div>
+  <div class="sc" id="hx" hidden>Vidas<b id="hl">♥♥♥</b></div>
   <div class="sc">Pontos<b id="score">0</b></div>
   <div class="sc">Recorde<b id="best">0</b></div>
   <button id="exit" title="Fechar o jogo (você pode voltar pelo painel)">Sair</button>
@@ -69,10 +70,10 @@ canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
 <footer id="pad"></footer>
 <script type="module">
 const Q = new URLSearchParams(location.search);
-const G = Q.get("g") === "tetris" ? "tetris" : "snake";
+const G = ["tetris", "pac"].includes(Q.get("g")) ? Q.get("g") : "snake";
 const $ = id => document.getElementById(id);
 const P = "com.gaduart.pausa/", KR = P + "r-", MID = P + "game";
-const NAMES = { snake: "Cobra", tetris: "Tetris" };
+const NAMES = { snake: "Cobra", tetris: "Tetris", pac: "Come-Come" };
 $("gname").textContent = NAMES[G];
 document.title = "Tavern Break · " + NAMES[G];
 
@@ -154,13 +155,169 @@ function tLock(t, rnd) {
   if (n) {
     t.grid = [...Array.from({ length: n }, () => Array(t.W).fill(0)), ...keep];
     t.score += [0, 100, 300, 500, 800][n] * t.level;
-    t.lines += n; t.level = 1 + Math.floor(t.lines / 10);
+    t.lines += n; t.level = 1 + Math.floor(t.lines / 5);
   }
   tSpawn(t, rnd);
 }
 function tDrop(t, rnd) { let n = 0; while (tMove(t, 0, 1)) n++; t.score += 2 * n; tLock(t, rnd); return n; }
 function tTick(t, rnd) { if (!tMove(t, 0, 1)) tLock(t, rnd); }
 function tGhostY(t) { let y = t.cur.y; while (!tHit(t, t.cur.m, t.cur.x, y + 1)) y++; return y; }
+// ---------- Come-Come (estilo Pac-Man) ----------
+const PAC_MAP = [
+  "###################",
+  "#........#........#",
+  "#o##.###.#.###.##o#",
+  "#.................#",
+  "#.##.#.#####.#.##.#",
+  "#....#...#...#....#",
+  "####.###.#.###.####",
+  "####.#.......#.####",
+  "####.#.##-##.#.####",
+  ".......#GGG#.......",
+  "####.#.#####.#.####",
+  "####.#.......#.####",
+  "####.#.#####.#.####",
+  "#........#........#",
+  "#.##.###.#.###.##.#",
+  "#o.#.....P.....#.o#",
+  "##.#.#.#####.#.#.##",
+  "#....#...#...#....#",
+  "#.######.#.######.#",
+  "#.................#",
+  "###################"
+];
+const PW = 19, PH = 21, PAC_SPD = 6.2;
+const PDIRS = [{ x: 0, y: -1 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 }];
+const PMODES = [["scatter", 6], ["chase", 18], ["scatter", 5], ["chase", 18], ["scatter", 4], ["chase", 20], ["scatter", 3], ["chase", 1e9]];
+const PCORNER = [{ x: 17, y: 1 }, { x: 1, y: 1 }, { x: 17, y: 19 }, { x: 1, y: 19 }];
+function pacNew(level = 1, score = 0, lives = 3) {
+  const grid = PAC_MAP.map(r => r.split("").map(c => (c === "P" || c === "G") ? " " : c));
+  let pellets = 0; grid.forEach(r => r.forEach(c => { if (c === "." || c === "o") pellets++; }));
+  const s = { W: PW, H: PH, grid, pellets, level, score, lives, over: false, t: 0, mode: "scatter", modeT: 0, modeI: 0, fright: 0, chain: 0, freeze: 1.6, dying: 0, won: 0, pops: [], pac: null, ghosts: [] };
+  pacReset(s);
+  return s;
+}
+function pacReset(s) {
+  s.pac = { x: 9, y: 15, dx: 0, dy: 0, p: 0, wx: 0, wy: 0, fx: -1, fy: 0 };
+  const k = Math.max(0.3, 1 - 0.1 * (s.level - 1));
+  const mk = (id, x, y, st, rel) => ({ id, x, y, dx: 0, dy: 0, p: 0, st, fr: false, rel: rel * k });
+  s.ghosts = [mk(0, 9, 7, "run", 0), mk(1, 9, 9, "house", 2), mk(2, 8, 9, "house", 5), mk(3, 10, 9, "house", 8)];
+  s.ghosts[0].dx = -1;
+  s.fright = 0; s.chain = 0; s.mode = PMODES[0][0]; s.modeI = 0; s.modeT = 0; s.freeze = 1.5; s.dying = 0;
+}
+function pacOpen(s, x, y, door) {
+  if (y < 0 || y >= s.H) return false;
+  const c = s.grid[y][(x + s.W) % s.W];
+  return c !== "#" && (c !== "-" || door);
+}
+function pacAdvance(e, dist, onArrive) {
+  e.p += dist;
+  while (e.p >= 1 && (e.dx || e.dy)) {
+    e.p -= 1;
+    e.x = (e.x + e.dx + PW) % PW; e.y += e.dy;
+    onArrive(e);
+    if (!e.dx && !e.dy) { e.p = 0; break; }
+  }
+  if (!e.dx && !e.dy) e.p = 0;
+}
+function pacReverse(e) { if (!(e.dx || e.dy)) return; e.x = (e.x + e.dx + PW) % PW; e.y += e.dy; e.dx = -e.dx; e.dy = -e.dy; e.p = 1 - e.p; }
+function pacChoose(s) {
+  const p = s.pac, can = (dx, dy) => pacOpen(s, p.x + dx, p.y + dy, false);
+  if ((p.wx || p.wy) && can(p.wx, p.wy)) { p.dx = p.wx; p.dy = p.wy; }
+  else if (!(p.dx || p.dy) || !can(p.dx, p.dy)) { p.dx = 0; p.dy = 0; }
+  if (p.dx || p.dy) { p.fx = p.dx; p.fy = p.dy; }
+}
+function pacEat(s) {
+  const p = s.pac, c = s.grid[p.y][p.x];
+  if (c === ".") { s.grid[p.y][p.x] = " "; s.pellets--; s.score += 10; }
+  else if (c === "o") {
+    s.grid[p.y][p.x] = " "; s.pellets--; s.score += 50;
+    s.fright = Math.max(2, 7 - (s.level - 1) * 0.8); s.chain = 0;
+    for (const g of s.ghosts) if (g.st !== "eyes") { g.fr = true; if (g.st === "run" || g.st === "exit") pacReverse(g); }
+  }
+}
+function ghostTarget(s, g) {
+  const p = s.pac;
+  if (g.st === "eyes") return { x: 9, y: 9 };
+  if (g.st === "exit") return { x: 9, y: 7 };
+  if (s.mode === "scatter") return PCORNER[g.id];
+  if (g.id === 0) return { x: p.x, y: p.y };
+  if (g.id === 1) return { x: p.x + 4 * p.fx, y: p.y + 4 * p.fy };
+  if (g.id === 2) { const b = s.ghosts[0]; return { x: 2 * (p.x + 2 * p.fx) - b.x, y: 2 * (p.y + 2 * p.fy) - b.y }; }
+  return ((g.x - p.x) ** 2 + (g.y - p.y) ** 2 > 64) ? { x: p.x, y: p.y } : PCORNER[3];
+}
+function ghostChoose(s, g, rnd) {
+  const door = g.st === "exit" || g.st === "eyes", moving = !!(g.dx || g.dy), opts = [];
+  for (const d of PDIRS) {
+    if (moving && d.x === -g.dx && d.y === -g.dy) continue;
+    if (pacOpen(s, g.x + d.x, g.y + d.y, door)) opts.push(d);
+  }
+  if (!opts.length) { g.dx = -g.dx; g.dy = -g.dy; return; }
+  let pick = opts[0];
+  if (g.fr && g.st === "run") pick = opts[Math.floor(rnd() * opts.length)];
+  else {
+    const t = ghostTarget(s, g); let best = 1e9;
+    for (const d of opts) { const dist = (g.x + d.x - t.x) ** 2 + (g.y + d.y - t.y) ** 2; if (dist < best) { best = dist; pick = d; } }
+  }
+  g.dx = pick.x; g.dy = pick.y;
+}
+function ghostArrive(s, g, rnd) {
+  if (g.st === "exit" && g.x === 9 && g.y === 7) g.st = "run";
+  else if (g.st === "eyes" && g.x === 9 && g.y === 9) { g.st = "exit"; g.fr = false; g.dx = 0; g.dy = 0; }
+  ghostChoose(s, g, rnd);
+}
+function ghostSpeed(s, g) {
+  if (g.st === "eyes") return 12;
+  if (g.st === "exit") return 3.5;
+  if (g.fr) return 3.2;
+  return 5.2 + 0.25 * Math.min(8, s.level - 1);
+}
+function pacStep(s, dt, rnd) {
+  if (s.over) return;
+  s.t += dt;
+  s.pops = s.pops.filter(q => (q.t -= dt) > 0);
+  if (s.won > 0) { s.won -= dt; if (s.won <= 0) Object.assign(s, pacNew(s.level + 1, s.score, s.lives)); return; }
+  if (s.dying > 0) { s.dying -= dt; if (s.dying <= 0) { s.lives--; if (s.lives <= 0) s.over = true; else pacReset(s); } return; }
+  if (s.freeze > 0) { s.freeze -= dt; return; }
+  const p = s.pac;
+  // modos (espalhar/perseguir) e susto
+  if (s.fright > 0) {
+    s.fright -= dt;
+    if (s.fright <= 0) { s.fright = 0; for (const g of s.ghosts) g.fr = false; }
+  } else {
+    s.modeT += dt;
+    if (s.modeT >= PMODES[s.modeI][1]) {
+      s.modeT = 0; s.modeI = Math.min(s.modeI + 1, PMODES.length - 1); s.mode = PMODES[s.modeI][0];
+      for (const g of s.ghosts) if (g.st === "run") pacReverse(g);
+    }
+  }
+  // comilão
+  if (!(p.dx || p.dy)) pacChoose(s);
+  if ((p.wx || p.wy) && (p.dx || p.dy) && p.wx === -p.dx && p.wy === -p.dy) { pacReverse(p); p.fx = p.dx; p.fy = p.dy; }
+  pacAdvance(p, PAC_SPD * dt, () => { pacEat(s); pacChoose(s); });
+  // fantasmas
+  for (const g of s.ghosts) {
+    if (g.st === "house") {
+      g.rel -= dt;
+      if (g.rel <= 0) { g.st = "exit"; g.dx = 0; g.dy = 0; ghostChoose(s, g, rnd); }
+      continue;
+    }
+    if (!(g.dx || g.dy)) ghostChoose(s, g, rnd);
+    pacAdvance(g, ghostSpeed(s, g) * dt, e => ghostArrive(s, e, rnd));
+  }
+  // colisões
+  const pp = { x: p.x + p.dx * p.p, y: p.y + p.dy * p.p };
+  for (const g of s.ghosts) {
+    if (g.st === "house" || g.st === "eyes") continue;
+    const gx = g.x + g.dx * g.p, gy = g.y + g.dy * g.p;
+    if (Math.hypot(gx - pp.x, gy - pp.y) > 0.6) continue;
+    if (g.fr) {
+      s.chain++; const pts = 100 * 2 ** s.chain; s.score += pts;
+      g.st = "eyes"; g.fr = false; s.pops.push({ x: gx, y: gy, t: 0.9, txt: String(pts) });
+    } else { s.dying = 1.4; return; }
+  }
+  if (s.pellets <= 0) s.won = 1.6;
+}
 //LOGIC-END
 
 // ---------- estado e recordes ----------
@@ -182,15 +339,41 @@ function readBoard(m) {
   if (mine && mine[G] > bestV) { bestV = mine[G]; saveLoc(G, bestV); $("best").textContent = bestV; }
   if (!ov.hidden) renderRank();
 }
+let flushing = false, retryT = null, okT = null;
 async function flush() {
-  if (!dirty || !OBR || !MY.id) return;
-  dirty = false;
+  if (!dirty || !OBR || !MY.id || flushing) return;
+  flushing = true; dirty = false; clearTimeout(retryT);
   const cur = board[MY.id] || {};
-  const rec = { n: MY.name, snake: Math.max(cur.snake || 0, loc("snake")), tetris: Math.max(cur.tetris || 0, loc("tetris")), ts: Date.now() };
+  const rec = { n: MY.name, snake: Math.max(cur.snake || 0, loc("snake")), tetris: Math.max(cur.tetris || 0, loc("tetris")), pac: Math.max(cur.pac || 0, loc("pac")), ts: Date.now() };
   board[MY.id] = rec;
-  try { await OBR.room.setMetadata({ [KR + MY.id]: rec }); } catch { dirty = true; }
+  let ok = false;
+  try { await OBR.room.setMetadata({ [KR + MY.id]: rec }); ok = true; }
+  catch (e) {
+    dirty = true;
+    $("net").textContent = "Não consegui salvar na tabela (" + ((e && e.message) || "erro") + "). Tentando de novo…";
+    retryT = setTimeout(flush, 5000);
+  }
+  flushing = false;
+  if (ok) {
+    $("net").textContent = "✓ Pontuação salva na tabela";
+    clearTimeout(okT); okT = setTimeout(() => { if ($("net").textContent.startsWith("✓")) $("net").textContent = ""; }, 4000);
+    if (dirty) flush();
+  }
   if (!ov.hidden) renderRank();
 }
+// confere se a minha melhor pontuação já está na tabela e, se não, manda
+function syncScore() {
+  if (!MY.id) { dirty = true; return; }
+  if (loc(G) > (((board[MY.id] || {})[G]) || 0)) { dirty = true; flush(); }
+}
+// durante a partida: salva o recorde de tempos em tempos, pra não perder se fecharem o jogo
+let ckT = 0;
+function checkpoint() {
+  if (!S || S.score <= bestV) return;
+  bestV = S.score; saveLoc(G, bestV); $("best").textContent = bestV; syncScore();
+}
+addEventListener("pagehide", checkpoint);
+document.addEventListener("visibilitychange", () => { if (document.hidden) checkpoint(); });
 function renderRank() {
   const r = $("rank"); r.textContent = "";
   const rows = Object.entries(board).filter(([, e]) => e[G] > 0).sort((a, b) => b[1][G] - a[1][G]).slice(0, 5);
@@ -217,6 +400,7 @@ async function connected(O) {
   try { readBoard(await O.room.getMetadata()); O.room.onMetadataChange(readBoard); } catch {}
   const remote = ((board[MY.id] || {})[G]) || 0;
   if (MY.id && loc(G) > remote) { dirty = true; flush(); }
+  else if (dirty) flush();
   if (exitWanted) { try { await O.modal.close(MID); } catch {} }
   if (!ov.hidden) renderRank();
 }
@@ -238,6 +422,7 @@ setTimeout(() => {
 }, 12000);
 
 $("exit").onclick = async () => {
+  checkpoint();
   if (OBR) { try { await OBR.modal.close(MID); } catch {} }
   else { exitWanted = true; $("net").textContent = "Conectando… fecho assim que conectar."; }
 };
@@ -273,10 +458,68 @@ function drawTet() {
     m.forEach((row, r) => row.forEach((v, c) => { if (v) cell(nx, ox + c, oy + r, COL[S.next]); }));
   }
 }
+
+const GCOL = ["#e0564f", "#f2a1d0", "#4fd1d9", "#f0a040"];
+let PREV = null;
+function drawPac() {
+  const g = cx, c = 24, s = S || PREV || (PREV = pacNew());
+  g.fillStyle = "#0a0914"; g.fillRect(0, 0, 456, 504);
+  const flash = s.won > 0 && Math.floor(s.won * 6) % 2 === 0;
+  const wall = (x, y) => y >= 0 && y < s.H && x >= 0 && x < s.W && s.grid[y][x] === "#";
+  g.fillStyle = "#0d1236";
+  for (let y = 0; y < s.H; y++) for (let x = 0; x < s.W; x++) if (wall(x, y)) g.fillRect(x * c, y * c, c, c);
+  g.strokeStyle = flash ? "#ffffff" : "#3a5bd9"; g.lineWidth = 2; g.lineCap = "round"; g.beginPath();
+  for (let y = 0; y < s.H; y++) for (let x = 0; x < s.W; x++) {
+    if (!wall(x, y)) continue;
+    const X = x * c, Y = y * c;
+    if (y > 0 && !wall(x, y - 1)) { g.moveTo(X, Y); g.lineTo(X + c, Y); }
+    if (y < s.H - 1 && !wall(x, y + 1)) { g.moveTo(X, Y + c); g.lineTo(X + c, Y + c); }
+    if (x > 0 && !wall(x - 1, y)) { g.moveTo(X, Y); g.lineTo(X, Y + c); }
+    if (x < s.W - 1 && !wall(x + 1, y)) { g.moveTo(X + c, Y); g.lineTo(X + c, Y + c); }
+  }
+  g.stroke();
+  for (let y = 0; y < s.H; y++) for (let x = 0; x < s.W; x++) {
+    const v = s.grid[y][x], X = x * c + c / 2, Y = y * c + c / 2;
+    if (v === "-") { g.fillStyle = "#f2a1d0"; g.fillRect(x * c, Y - 2, c, 4); }
+    else if (v === ".") { g.fillStyle = "#f2d9b0"; g.beginPath(); g.arc(X, Y, 2.5, 0, 7); g.fill(); }
+    else if (v === "o") { g.fillStyle = "#f2d9b0"; g.beginPath(); g.arc(X, Y, 5 + (Math.floor(s.t * 4) % 2), 0, 7); g.fill(); }
+  }
+  const at = e => ({ x: (e.x + e.dx * e.p) * c + c / 2, y: (e.y + e.dy * e.p) * c + c / 2 });
+  // comilão
+  const p = s.pac, pp = at(p), moving = !!(p.dx || p.dy);
+  const m = s.dying > 0 ? Math.PI * (1 - s.dying / 1.4) : (moving ? 0.05 + 0.5 * Math.abs(Math.sin(s.t * 14)) : 0.3);
+  const a = Math.atan2(p.fy, p.fx);
+  g.fillStyle = "#f6d138"; g.beginPath(); g.moveTo(pp.x, pp.y); g.arc(pp.x, pp.y, c * 0.46, a + m, a + 2 * Math.PI - m); g.closePath(); g.fill();
+  // fantasmas
+  if (!(s.dying > 0 && s.dying < 1.0)) for (const e of s.ghosts) {
+    const q = at(e), r = c * 0.46;
+    if (e.st !== "eyes") {
+      const warn = e.fr && s.fright < 2 && Math.floor(s.t * 6) % 2 === 0;
+      g.fillStyle = e.fr ? (warn ? "#f0f0ff" : "#2a3fd1") : GCOL[e.id];
+      g.beginPath(); g.arc(q.x, q.y - 1, r, Math.PI, 0); g.lineTo(q.x + r, q.y + r);
+      const w = (2 * r) / 3, f = Math.floor(s.t * 8) % 2;
+      for (let i = 0; i < 3; i++) { g.lineTo(q.x + r - w * (i + 0.5), q.y + r - ((i + f) % 2 ? 0 : 4)); g.lineTo(q.x + r - w * (i + 1), q.y + r); }
+      g.closePath(); g.fill();
+    }
+    if (e.fr && e.st !== "eyes") {
+      g.fillStyle = warn0(e, s) ? "#d1362a" : "#f2d9b0";
+      g.fillRect(q.x - 5, q.y - 3, 3, 3); g.fillRect(q.x + 2, q.y - 3, 3, 3);
+    } else {
+      g.fillStyle = "#fff"; g.beginPath(); g.arc(q.x - 4, q.y - 3, 3.6, 0, 7); g.arc(q.x + 4, q.y - 3, 3.6, 0, 7); g.fill();
+      g.fillStyle = "#1a1a6b"; g.beginPath(); g.arc(q.x - 4 + e.dx * 1.8, q.y - 3 + e.dy * 1.8, 1.8, 0, 7); g.arc(q.x + 4 + e.dx * 1.8, q.y - 3 + e.dy * 1.8, 1.8, 0, 7); g.fill();
+    }
+  }
+  g.font = "bold 12px system-ui"; g.textAlign = "center"; g.fillStyle = "#7fe0e0";
+  for (const q of s.pops) g.fillText(q.txt, q.x * c + c / 2, q.y * c + c / 2);
+  if (S && state === "play" && s.freeze > 0) { g.font = "bold 16px system-ui"; g.fillStyle = "#f6d138"; g.fillText("PRONTO!", 228, 11 * c + 17); }
+  g.textAlign = "start";
+}
+const warn0 = (e, s) => s.fright < 2 && Math.floor(s.t * 6) % 2 === 0;
 function hud() {
   if (!S) return;
   $("score").textContent = S.score;
   if (G === "tetris") { $("lvl").textContent = S.level; $("lns").textContent = S.lines; }
+  if (G === "pac") { $("hl").textContent = "♥".repeat(Math.max(0, S.lives)) || "—"; $("gname").textContent = "Come-Come · Nv " + S.level; }
 }
 function fit() {
   const st = $("stage"), side = G === "tetris" ? 120 : 0;
@@ -296,19 +539,21 @@ function showOv(kind, isNew) {
 }
 function start() {
   if (state === "play") return;
-  if (G === "snake") { S = snakeNew(20); snakePlaceFood(S, rnd); } else { S = tNew(); tSpawn(S, rnd); }
+  if (G === "snake") { S = snakeNew(20); snakePlaceFood(S, rnd); } else if (G === "pac") S = pacNew(); else { S = tNew(); tSpawn(S, rnd); }
+  S.startBest = bestV; ckT = 0;
   state = "play"; ov.hidden = true; acc = 0; last = performance.now();
   $("score").textContent = 0; hud();
   window.focus();
 }
 function over() {
   state = "over";
-  const isNew = S.score > bestV;
-  if (isNew) { bestV = S.score; saveLoc(G, bestV); $("best").textContent = bestV; dirty = true; flush(); }
+  const isNew = S.score > S.startBest;
+  if (S.score > bestV) { bestV = S.score; saveLoc(G, bestV); $("best").textContent = bestV; }
+  syncScore();
   hud(); showOv("over", isNew);
 }
 function step() {
-  if (G === "snake") snakeStep(S, rnd); else tTick(S, rnd);
+  if (G === "snake") snakeStep(S, rnd); else if (G === "pac") pacStep(S, 1 / 60, rnd); else tTick(S, rnd);
   if (S.over) over();
 }
 function act(a) {
@@ -316,6 +561,9 @@ function act(a) {
   if (G === "snake") {
     const d = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }[a];
     if (d) snakeTurn(S, d);
+  } else if (G === "pac") {
+    const d = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }[a];
+    if (d) { S.pac.wx = d.x; S.pac.wy = d.y; }
   } else {
     if (a === "left") tMove(S, -1, 0);
     else if (a === "right") tMove(S, 1, 0);
@@ -329,12 +577,13 @@ function act(a) {
 function loop(ts) {
   if (state === "play") {
     acc += Math.min(250, ts - last);
-    const iv = G === "snake" ? Math.max(65, 140 - Math.floor(S.score / 10) * 3) : Math.max(90, 800 - (S.level - 1) * 65);
+    const iv = G === "pac" ? 1000 / 60 : G === "snake" ? Math.max(65, 140 - Math.floor(S.score / 10) * 3) : Math.max(60, 520 - (S.level - 1) * 48);
     while (acc >= iv && state === "play") { acc -= iv; step(); }
     hud();
+    ckT += ts - last; if (ckT > 3000) { ckT = 0; checkpoint(); }
   }
   last = ts;
-  if (G === "snake") drawSnake(); else drawTet();
+  if (G === "snake") drawSnake(); else if (G === "pac") drawPac(); else drawTet();
   requestAnimationFrame(loop);
 }
 
@@ -357,7 +606,7 @@ $("ovgo").onclick = () => { if (state !== "play") start(); };
 
 (function bindPad() {
   const pad = $("pad");
-  const defs = G === "snake" ? [["left", "◀"], ["up", "▲"], ["down", "▼"], ["right", "▶"]]
+  const defs = G !== "tetris" ? [["left", "◀"], ["up", "▲"], ["down", "▼"], ["right", "▶"]]
     : [["left", "◀"], ["rot", "⟳"], ["right", "▶"], ["down", "▼"], ["drop", "⤓"]];
   for (const [a, l] of defs) {
     const b = document.createElement("button"); b.textContent = l; b.setAttribute("aria-label", a);
@@ -382,7 +631,7 @@ $("ovgo").onclick = () => { if (state !== "play") start(); };
   });
   st.addEventListener("pointermove", e => {
     if (!g || e.pointerId !== g.id || state !== "play") return;
-    if (G === "snake") {
+    if (G !== "tetris") {
       const dx = e.clientX - g.ax, dy = e.clientY - g.ay;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
       act(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
@@ -406,8 +655,9 @@ $("ovgo").onclick = () => { if (state !== "play") start(); };
   st.addEventListener("pointercancel", endG);
 })();
 
-cv.width = G === "snake" ? 480 : 240; cv.height = 480;
-$("ovh").textContent = G === "snake" ? "Setas, WASD ou deslize o dedo na tela" : "← → mover · ↑ girar · ↓ descer · espaço: cair de vez\nNo celular: arraste pra mover, toque pra girar, puxe rápido pra baixo pra derrubar";
+cv.width = G === "snake" ? 480 : G === "pac" ? 456 : 240; cv.height = G === "pac" ? 504 : 480;
+$("hx").hidden = G !== "pac";
+$("ovh").textContent = G === "pac" ? "Setas, WASD ou deslize o dedo. Coma todas as bolinhas e fuja dos fantasmas; as bolas grandes deixam você comê-los." : G === "snake" ? "Setas, WASD ou deslize o dedo na tela" : "← → mover · ↑ girar · ↓ descer · espaço: cair de vez\nNo celular: arraste pra mover, toque pra girar, puxe rápido pra baixo pra derrubar";
 $("ovh").style.whiteSpace = "pre-line";
 addEventListener("resize", fit); fit();
 showOv("ready", false);
