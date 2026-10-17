@@ -90,7 +90,7 @@ function render() {
   $("restart").hidden = !on;
   $("restart").textContent = sel === cur ? "🔄 Reiniciar para todos" : "🔄 Trocar para " + NAMES[sel];
   $("resume").hidden = !on;
-  $("hgame").hidden = !gm; document.querySelector(".games").hidden = !gm;
+  $("hgame").textContent = gm ? "Escolha o jogo" : "Jogos";
   const mine = $("mine");
   mine.hidden = !OBR || (!gm && !on);
   mine.textContent = gm ? "🎮 Jogar também (só pra mim)" : "🎮 Voltar ao jogo";

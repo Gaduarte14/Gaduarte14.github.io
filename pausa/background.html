@@ -27,7 +27,6 @@ const apply = async m => {
   cur = want;
   try { await OBR.modal.close(MID); } catch {}
   if (want) {
-    // tela cheia: não tem "fora" pra clicar, então não fecha sem querer
     try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, fullScreen: true, hidePaper: true }); } catch {}
   }
 };
