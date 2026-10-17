@@ -48,7 +48,7 @@ canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
   <div class="sc" id="hx" hidden>Vidas<b id="hl">♥♥♥</b></div>
   <div class="sc">Pontos<b id="score">0</b></div>
   <div class="sc">Recorde<b id="best">0</b></div>
-  <button id="exit" title="Fechar o jogo (você pode voltar pelo painel)">Sair</button>
+  <button id="exit" hidden title="Fechar o jogo">Sair</button>
 </header>
 <main id="stage">
   <canvas id="cv"></canvas>
@@ -397,6 +397,7 @@ async function connected(O) {
   OBR = O; $("net").textContent = "";
   try { sessionStorage.removeItem("tb-tries"); } catch {}
   try { MY.id = await O.player.getId(); MY.name = (await O.player.getName()) || "Jogador"; } catch {}
+  try { if ((await O.player.getRole()) === "GM") $("exit").hidden = false; } catch {}   // só o mestre pode fechar
   try { readBoard(await O.room.getMetadata()); O.room.onMetadataChange(readBoard); } catch {}
   const remote = ((board[MY.id] || {})[G]) || 0;
   if (MY.id && loc(G) > remote) { dirty = true; flush(); }

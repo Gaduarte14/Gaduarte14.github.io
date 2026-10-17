@@ -27,7 +27,10 @@ const apply = async m => {
   cur = want;
   try { await OBR.modal.close(MID); } catch {}
   if (want) {
-    try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, fullScreen: true, hidePaper: true }); } catch {}
+    // não usa tela cheia: deixa as barras e extensões do Owlbear à vista e cobre só a área do mapa
+    let W = 1000, H = 700;
+    try { W = await OBR.viewport.getWidth(); H = await OBR.viewport.getHeight(); } catch {}
+    try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, width: Math.max(300, Math.round(W - 220)), height: Math.max(300, Math.round(H - 180)), hideBackdrop: true, hidePaper: true }); } catch {}
   }
 };
 const go = m => { q = q.then(() => apply(m)).catch(() => {}); };

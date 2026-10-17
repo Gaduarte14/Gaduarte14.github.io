@@ -90,7 +90,7 @@ function render() {
   $("restart").hidden = !on;
   $("restart").textContent = sel === cur ? "🔄 Reiniciar para todos" : "🔄 Trocar para " + NAMES[sel];
   $("resume").hidden = !on;
-  $("hgame").textContent = gm ? "Escolha o jogo" : "Jogos";
+  $("hgame").hidden = !gm; document.querySelector(".games").hidden = !gm;
   const mine = $("mine");
   mine.hidden = !OBR || (!gm && !on);
   mine.textContent = gm ? "🎮 Jogar também (só pra mim)" : "🎮 Voltar ao jogo";
@@ -140,7 +140,9 @@ $("resume").onclick = () => setState({ on: false });
 $("mine").onclick = async () => {
   const g = role === "GM" ? sel : (st.game || "snake"), run = role === "GM" ? Date.now() : (st.run || 0);
   try { await OBR.modal.close(MID); } catch {}
-  try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(g) + "&run=" + run, fullScreen: true, hidePaper: true }); }
+  let W = 1000, H = 700;
+  try { W = await OBR.viewport.getWidth(); H = await OBR.viewport.getHeight(); } catch {}
+  try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(g) + "&run=" + run, width: Math.max(300, Math.round(W - 220)), height: Math.max(300, Math.round(H - 180)), hideBackdrop: true, hidePaper: true }); }
   catch { setNote("Não consegui abrir o jogo."); }
 };
 
