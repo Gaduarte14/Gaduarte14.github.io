@@ -139,10 +139,8 @@ $("restart").onclick = () => setState({ on: true, game: sel, run: Date.now() });
 $("resume").onclick = () => setState({ on: false });
 $("mine").onclick = async () => {
   const g = role === "GM" ? sel : (st.game || "snake"), run = role === "GM" ? Date.now() : (st.run || 0);
-  try { await OBR.popover.close(MID); } catch {}
-  let W = 1000, H = 700; const TOP = 68;
-  try { W = await OBR.viewport.getWidth(); H = await OBR.viewport.getHeight(); } catch {}
-  try { await OBR.popover.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(g) + "&run=" + run, width: Math.max(300, Math.round(W)), height: Math.max(300, Math.round(H - TOP)), anchorReference: "POSITION", anchorPosition: { left: 0, top: TOP }, anchorOrigin: { horizontal: "LEFT", vertical: "TOP" }, transformOrigin: { horizontal: "LEFT", vertical: "TOP" }, marginThreshold: 0, hidePaper: true, disableClickAway: true }); }
+  try { await OBR.modal.close(MID); } catch {}
+  try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(g) + "&run=" + run, fullScreen: true, hidePaper: true }); }
   catch { setNote("Não consegui abrir o jogo."); }
 };
 

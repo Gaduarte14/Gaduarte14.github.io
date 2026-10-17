@@ -19,18 +19,16 @@ const apply = async m => {
   const ended = wasOn && !on;
   wasOn = on;
   if (role === "GM") {                       // o mestre nunca é puxado pra tela cheia; só fecha ao retomar
-    if (ended) { try { await OBR.popover.close(MID); } catch {} }
+    if (ended) { try { await OBR.modal.close(MID); } catch {} }
     return;
   }
   const want = on && s.game ? s.game + ":" + s.run : null;
   if (want === cur) return;
   cur = want;
-  try { await OBR.popover.close(MID); } catch {}
+  try { await OBR.modal.close(MID); } catch {}
   if (want) {
-    // popover que não fecha ao clicar fora; deixa só a barra de extensões do Owlbear à vista (TOP = altura dela)
-    let W = 1000, H = 700; const TOP = 68;
-    try { W = await OBR.viewport.getWidth(); H = await OBR.viewport.getHeight(); } catch {}
-    try { await OBR.popover.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, width: Math.max(300, Math.round(W)), height: Math.max(300, Math.round(H - TOP)), anchorReference: "POSITION", anchorPosition: { left: 0, top: TOP }, anchorOrigin: { horizontal: "LEFT", vertical: "TOP" }, transformOrigin: { horizontal: "LEFT", vertical: "TOP" }, marginThreshold: 0, hidePaper: true, disableClickAway: true }); } catch {}
+    // tela cheia: não tem "fora" pra clicar, então não fecha sem querer
+    try { await OBR.modal.open({ id: MID, url: "/pausa/jogo.html?g=" + encodeURIComponent(s.game) + "&run=" + s.run, fullScreen: true, hidePaper: true }); } catch {}
   }
 };
 const go = m => { q = q.then(() => apply(m)).catch(() => {}); };
