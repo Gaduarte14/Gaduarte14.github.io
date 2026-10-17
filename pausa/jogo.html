@@ -402,7 +402,7 @@ async function connected(O) {
   const remote = ((board[MY.id] || {})[G]) || 0;
   if (MY.id && loc(G) > remote) { dirty = true; flush(); }
   else if (dirty) flush();
-  if (exitWanted) { try { await O.modal.close(MID); } catch {} }
+  if (exitWanted) { try { await O.popover.close(MID); } catch {} }
   if (!ov.hidden) renderRank();
 }
 const onUp = () => { if (up) return; up = true; connected(window.__sdk); };
@@ -424,7 +424,7 @@ setTimeout(() => {
 
 $("exit").onclick = async () => {
   checkpoint();
-  if (OBR) { try { await OBR.modal.close(MID); } catch {} }
+  if (OBR) { try { await OBR.popover.close(MID); } catch {} }
   else { exitWanted = true; $("net").textContent = "Conectando… fecho assim que conectar."; }
 };
 
