@@ -6,20 +6,20 @@
 :root{--bg:#1f1a14;--panel:#2b241b;--line:#4a3d2c;--ink:#f1e8d6;--mute:#a89a82;--ac:#e8943a;--ok:#8fc98a;--bad:#e57a7a}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
-header{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
-header h1{font:700 18px Georgia,serif;margin:0 auto 0 0;color:var(--ac)}
-button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif;position:relative;overflow:hidden}
+header{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--line)}
+header h1{font:700 17px Georgia,serif;margin:0 auto 0 0;color:var(--ac)}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer}
 button:hover{border-color:var(--ac)}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ac)}
 button.pri{background:var(--ac);border-color:var(--ac);color:#1f1a14;font-weight:700}
 button.bad{border-color:var(--bad);color:var(--bad)}
 button.on{background:var(--ac);border-color:var(--ac);color:#1f1a14;font-weight:700}
 [hidden]{display:none!important}
-#new-menu{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+#new-menu{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
 #new-menu span{font-size:12px;color:var(--mute);margin-right:2px}
-main{flex:1;min-height:0;display:flex;flex-direction:column}
-#status{font-size:12px;color:var(--mute);padding:3px 10px;border-bottom:1px solid var(--line)}
+main{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+#status{font-size:11px;color:var(--mute);padding:2px 10px;border-bottom:1px solid var(--line)}
 #status.ok{color:var(--ok)}#status.warn{color:var(--bad)}
 .view{flex:1;min-height:0;display:none;flex-direction:column}
 .view.on{display:flex}
@@ -31,42 +31,55 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 .it .bdg.ficha{border-color:var(--ac);color:var(--ac)}
 .it span.sub{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .empty{color:var(--mute);padding:20px;text-align:center}
-.bar{display:flex;gap:6px;padding:6px 10px;align-items:center;flex-wrap:wrap}
-.ficha-panel{border-bottom:1px solid var(--line);background:#1b1610;padding:6px 10px;display:flex;flex-direction:column;gap:6px}
-.ficha-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px}
+.bar{display:flex;gap:5px;padding:6px 10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.ficha-panel{border-bottom:1px solid var(--line);background:#1b1610;padding:5px 10px;display:flex;flex-direction:column;gap:5px}
+.ficha-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:12px}
 .ficha-row span.lbl{color:var(--mute)}
-.ficha-row button{padding:3px 8px;font-size:12px}
+.ficha-row button{padding:2px 7px;font-size:12px}
 .ini-box{display:flex;align-items:center;gap:4px;margin-right:auto}
-.ini-box input{width:52px;text-align:center;font:700 13px system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 4px}
-#title{flex:1;min-width:120px;font:700 16px Georgia,serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
-#ed{flex:1;min-height:0;margin:0 10px;resize:none;color:var(--ink);background:#17130e;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
-#rd{flex:1;min-height:0;overflow:auto;padding:4px 14px 10px}
-.foot{display:flex;gap:6px;padding:8px 10px;align-items:center;flex-wrap:wrap}
-.foot .sz{margin-left:auto;font-size:12px;color:var(--mute)}
-#rolls{border-top:1px solid var(--line);background:#17130e;max-height:35%;overflow-y:auto;padding:6px 10px;display:none}
-#rolls.on{display:block}
-#rolls .r{display:flex;gap:8px;align-items:baseline;padding:2px 0}
-#rolls .r b{font:700 18px Georgia,serif;min-width:30px}
-#rolls .r span{color:var(--mute);font-size:12px;word-break:break-word}
-#rolls .r span s{opacity:.5}
-#rolls .tag{font-size:11px;padding:1px 5px;border-radius:4px;background:var(--panel);color:var(--ac);border:1px solid var(--line);margin-left:auto;white-space:nowrap}
+.ini-box input{width:46px;text-align:center;font:700 12px system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 4px}
+#title{flex:1;min-width:90px;font:700 15px Georgia,serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 7px}
+#ed{flex:1;min-height:0;margin:6px 10px 0;resize:none;color:var(--ink);background:#17130e;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+#rd{flex:1;min-height:0;overflow:auto;padding:6px 14px 12px}
+.foot{display:flex;gap:6px;padding:5px 10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);font-size:12px}
+.foot button{padding:3px 8px;font-size:12px}
+.foot .sz{margin-left:auto;font-size:11px;color:var(--mute)}
+
+/* Toast flutuante e histórico sobreposto (não espreme a ficha) */
+#roll-toast{position:absolute;left:10px;right:10px;bottom:40px;background:#17130e;border:1px solid var(--ac);border-radius:8px;padding:6px 10px;display:none;align-items:center;gap:8px;box-shadow:0 6px 18px rgba(0,0,0,.65);z-index:20}
+#roll-toast.on{display:flex}
+#roll-toast b{font:700 19px Georgia,serif;color:var(--ac);min-width:26px;text-align:center}
+#roll-toast .rt-det{flex:1;min-width:0;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#roll-toast .rt-det s{opacity:.5}
+#roll-toast .tag{font-size:10px;padding:1px 5px;border-radius:4px;background:var(--panel);color:var(--ac);border:1px solid var(--line);white-space:nowrap}
+#roll-toast button.x{padding:1px 6px;font-size:12px;background:transparent;border:0;color:var(--mute)}
+
+#rolls-pop{position:absolute;left:10px;right:10px;bottom:40px;background:#17130e;border:1px solid var(--line);border-radius:8px;max-height:55%;overflow-y:auto;padding:8px 10px;display:none;flex-direction:column;gap:4px;box-shadow:0 8px 24px rgba(0,0,0,.75);z-index:25}
+#rolls-pop.on{display:flex}
+#rolls-pop .rh-hd{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--mute);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:2px}
+#rolls-pop .r{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+#rolls-pop .r b{font:700 16px Georgia,serif;min-width:28px;color:var(--ac)}
+#rolls-pop .r span{color:var(--mute);font-size:12px;word-break:break-word}
+#rolls-pop .r span s{opacity:.5}
+#rolls-pop .tag{font-size:10px;padding:1px 5px;border-radius:4px;background:var(--panel);color:var(--ac);border:1px solid var(--line);margin-left:auto;white-space:nowrap}
+
 #tools{display:none;padding:10px;overflow-y:auto;flex-direction:column;gap:8px}
 #tools.on{display:flex}
 #tools .row{display:flex;gap:6px;flex-wrap:wrap}
 #tools p{margin:0;color:var(--mute);font-size:13px}
 #tout{font-size:13px;white-space:pre-wrap}
 /* markdown */
-.md h1,.md h2,.md h3{font-family:Georgia,serif;margin:.7em 0 .3em;color:var(--ac)}
-.md h1{font-size:22px;border-bottom:1px solid var(--line);padding-bottom:3px}.md h2{font-size:18px}.md h3{font-size:15px}
-.md p{margin:.4em 0}
-.md .sub{font-size:12px;color:var(--mute);margin:.3em 0}
-.md blockquote{margin:.5em 0;padding:2px 10px;border-left:3px solid var(--ac);background:rgba(232,148,58,.08);color:#e5dac4}
-.md ul,.md ol{margin:.4em 0;padding-left:22px}
-.md hr{border:0;border-top:1px solid var(--line);margin:.8em 0}
+.md h1,.md h2,.md h3{font-family:Georgia,serif;margin:.6em 0 .25em;color:var(--ac)}
+.md h1{font-size:20px;border-bottom:1px solid var(--line);padding-bottom:3px}.md h2{font-size:17px}.md h3{font-size:15px}
+.md p{margin:.35em 0}
+.md .sub{font-size:12px;color:var(--mute);margin:.25em 0}
+.md blockquote{margin:.4em 0;padding:2px 10px;border-left:3px solid var(--ac);background:rgba(232,148,58,.08);color:#e5dac4}
+.md ul,.md ol{margin:.35em 0;padding-left:20px}
+.md hr{border:0;border-top:1px solid var(--line);margin:.6em 0}
 .md code{background:#17130e;border:1px solid var(--line);border-radius:4px;padding:0 4px;font:12.5px ui-monospace,Consolas,monospace}
-.md pre{background:#17130e;border:1px solid var(--line);border-radius:6px;padding:8px;overflow-x:auto;margin:.5em 0}
+.md pre{background:#17130e;border:1px solid var(--line);border-radius:6px;padding:8px;overflow-x:auto;margin:.4em 0}
 .md pre code{border:0;padding:0}
-.md .tw{overflow-x:auto;margin:.5em 0}
+.md .tw{overflow-x:auto;margin:.4em 0}
 .md table{border-collapse:collapse;min-width:100%}
 .md th,.md td{border:1px solid var(--line);padding:4px 8px;text-align:left;white-space:nowrap}
 .md th{background:var(--panel);color:var(--ac)}
@@ -93,13 +106,11 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
   </section>
   <section class="view" id="v-note">
     <div class="bar">
-      <button id="bback">← Voltar</button>
-      <input id="title" type="text" maxlength="80" placeholder="Nome do personagem / título" aria-label="Título">
-    </div>
-    <div class="bar">
-      <button id="mread" class="on">Ler / jogar</button>
+      <button id="bback" title="Voltar para a lista">←</button>
+      <input id="title" type="text" maxlength="80" placeholder="Nome / título" aria-label="Título">
+      <button id="mread" class="on">Ler</button>
       <button id="medit">Editar</button>
-      <button id="btpl" hidden title="Inserir modelo de ficha no texto">📋 Modelo de Ficha</button>
+      <button id="btpl" hidden title="Inserir modelo de ficha no texto">📋 Modelo</button>
     </div>
 
     <!-- Painel exclusivo do modo FICHA -->
@@ -114,7 +125,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
         <button id="btn-dis" data-m="dis" title="Rolar com Desvantagem (2d20kl1)">Desv.</button>
       </div>
       <div class="ficha-row" id="tgt-bar">
-        <span class="lbl">Enviar dados:</span>
+        <span class="lbl">Enviar:</span>
         <button class="on" data-target="rh" title="Enviar para o chat público do Rollhaven">Rollhaven</button>
         <button data-target="ms" title="Enviar em segredo para o Master Shield (aba Outros)">Master Shield (GM)</button>
         <button data-target="loc" title="Apenas mostrar nesta ficha">Só local</button>
@@ -123,9 +134,25 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 
     <textarea id="ed" hidden spellcheck="false" aria-label="Texto da nota"></textarea>
     <div id="rd" class="md"></div>
+
+    <!-- Toast de 1 linha (some sozinho e não espreme a ficha) -->
+    <div id="roll-toast" aria-live="polite">
+      <b id="rt-t"></b>
+      <div class="rt-det" id="rt-d"></div>
+      <span class="tag" id="rt-tag"></span>
+      <button class="x" id="rt-close" title="Fechar">✕</button>
+    </div>
+
+    <!-- Histórico sobreposto opcional (só abre se clicar no botão 🎲 do rodapé) -->
+    <div id="rolls-pop">
+      <div class="rh-hd"><span>Últimas rolagens</span><button class="x" id="rh-close" style="padding:0 5px;border:0;background:none;color:var(--mute)">✕</button></div>
+      <div id="rolls-list"></div>
+    </div>
+
     <div class="foot">
       <button id="bexp">Exportar .md</button>
       <button id="bdel" class="bad">Apagar</button>
+      <button id="bhist" hidden title="Ver últimas rolagens">🎲 Histórico</button>
       <span class="sz" id="sz"></span>
     </div>
   </section>
@@ -145,7 +172,6 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
     <div id="tout"></div>
   </section>
 </main>
-<div id="rolls" aria-live="polite"></div>
 <script type="module">
 const ENG = "https://gaduarte14.github.io/dados/engine.js";
 const P = "com.gaduart.scribe/", LS = "scribe-v1";
@@ -240,7 +266,7 @@ const FICHA_TEMPLATE = `-# Raça · Classe Nível 1 · Antecedente
 // ---------- estado ----------
 let state = { ts: 0, notes: [] }, cur = null, mode = "read";
 let me = { name: "Jogador", color: "#e0a44a" };
-let rollTarget = "rh"; // "rh" (Rollhaven) | "ms" (Master Shield) | "loc" (Só local)
+let rollTarget = "rh"; // "rh" | "ms" | "loc"
 let rollMode = null;   // null | "adv" | "dis"
 
 const dirty = new Set();
@@ -372,7 +398,7 @@ function openNote(id, m) {
   const n = state.notes.find(x => x.id === id); if (!n) return;
   if (!n.tp) n.tp = "ficha";
   $("title").value = n.t;
-  $("title").placeholder = n.tp === "ficha" ? "Nome do personagem (igual ao token)" : "Título da anotação";
+  $("title").placeholder = n.tp === "ficha" ? "Nome do personagem" : "Título da anotação";
   $("ed").value = n.b;
   syncIniUI(n);
   setMode(m || "read");
@@ -384,15 +410,14 @@ function setMode(m) {
   mode = m;
   const n = state.notes.find(x => x.id === cur);
   const isFicha = (n?.tp || "ficha") === "ficha";
-  $("mread").textContent = isFicha ? "Ler / jogar" : "Ler";
   $("mread").classList.toggle("on", m === "read");
   $("medit").classList.toggle("on", m === "edit");
   $("ed").hidden = m !== "edit";
   $("rd").hidden = m !== "read";
   $("btpl").hidden = !(isFicha && m === "edit");
   $("ficha-panel").hidden = !(isFicha && m === "read");
-  if (!isFicha) $("rolls").classList.remove("on");
-  else if (hist.length > 0) $("rolls").classList.add("on");
+  $("bhist").hidden = !isFicha || hist.length === 0;
+  if (!isFicha) { $("roll-toast").classList.remove("on"); $("rolls-pop").classList.remove("on"); }
   if (m === "read" && n) $("rd").innerHTML = md(n.b, isFicha) || '<p class="sub">(vazio)</p>';
 }
 function sz() { $("sz").textContent = kb(totalBytes()) + " de 1 MB"; }
@@ -431,7 +456,7 @@ $("btpl").onclick = () => {
 };
 
 $("list").onclick = e => { const b = e.target.closest(".it"); if (b) openNote(b.dataset.id, "read"); };
-$("bback").onclick = () => { cur = null; $("rolls").classList.remove("on"); render(); show("v-list"); };
+$("bback").onclick = () => { cur = null; $("roll-toast").classList.remove("on"); $("rolls-pop").classList.remove("on"); render(); show("v-list"); };
 $("mread").onclick = () => setMode("read");
 $("medit").onclick = () => { setMode("edit"); $("ed").focus(); };
 $("title").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; n.t = e.target.value; n.ts = Date.now(); changed(n.id); };
@@ -472,6 +497,7 @@ $("bdel").onclick = () => {
 
 // ---------- rolagens integradas (Rollhaven, Warpath, Master Shield e Local) ----------
 const hist = [];
+let toastTimer = null;
 
 async function ensureConnected() {
   if (isReady) return true;
@@ -534,6 +560,48 @@ async function sendToMasterShield(formula, label) {
   }
 }
 
+function fillStrikeText(container, text) {
+  container.textContent = "";
+  const parts = text.split(/(~-?\d+~)/);
+  for (const p of parts) {
+    if (/^~-?\d+~$/.test(p)) {
+      const s = document.createElement("s"); s.textContent = p.slice(1, -1); container.append(s);
+    } else {
+      container.append(p);
+    }
+  }
+}
+
+function showRollToast(h) {
+  $("bhist").hidden = false;
+  $("rt-t").textContent = h.t;
+  fillStrikeText($("rt-d"), h.f + " ⟵ " + h.d);
+  $("rt-tag").textContent = h.tag;
+  $("roll-toast").classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $("roll-toast").classList.remove("on"); }, 4500);
+  drawRollsPop();
+}
+
+$("rt-close").onclick = () => { clearTimeout(toastTimer); $("roll-toast").classList.remove("on"); };
+$("bhist").onclick = () => { $("roll-toast").classList.remove("on"); $("rolls-pop").classList.toggle("on"); };
+$("rh-close").onclick = () => { $("rolls-pop").classList.remove("on"); };
+
+function drawRollsPop() {
+  const box = $("rolls-list"); box.textContent = "";
+  for (const h of hist) {
+    const r = document.createElement("div"); r.className = "r";
+    const t = document.createElement("b"); t.textContent = h.t;
+    const d = document.createElement("span");
+    fillStrikeText(d, h.f + "  ⟵ " + h.d);
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = h.tag;
+    r.append(t, d, tag);
+    box.append(r);
+  }
+}
+
 // Botão de Iniciativa -> envia direto pro Warpath e pro Rollhaven
 $("btn-ini").onclick = async () => {
   const n = state.notes.find(x => x.id === cur); if (!n) return;
@@ -557,9 +625,10 @@ $("btn-ini").onclick = async () => {
     try { OBR.notification.show(`${charName || me.name} — Iniciativa: ${res.t}`.slice(0, 120)); } catch {}
   }
   const tag = ok ? (charName ? "Warpath + Rollhaven" : "⚠ Sem nome p/ Warpath") : "Local (offline)";
-  hist.unshift({ f: r.formula, t: res.t, d: res.d, tag });
-  hist.length = Math.min(hist.length, 6);
-  drawRolls();
+  const entry = { f: r.formula, t: res.t, d: res.d, tag };
+  hist.unshift(entry);
+  hist.length = Math.min(hist.length, 8);
+  showRollToast(entry);
 };
 
 // Clique em qualquer dado no texto da Ficha
@@ -573,9 +642,10 @@ $("rd").addEventListener("click", async e => {
     const ok = await sendToMasterShield(b.dataset.f, label);
     if (ok) {
       const mTxt = rollMode === "adv" ? " (Vantagem)" : rollMode === "dis" ? " (Desv.)" : "";
-      hist.unshift({ f: b.dataset.f + mTxt, t: "🎲", d: "Rolagem secreta enviada ao Mestre", tag: "Master Shield (GM)" });
-      hist.length = Math.min(hist.length, 6);
-      drawRolls();
+      const entry = { f: b.dataset.f + mTxt, t: "🎲", d: "Enviada ao Mestre", tag: "Master Shield (GM)" };
+      hist.unshift(entry);
+      hist.length = Math.min(hist.length, 8);
+      showRollToast(entry);
     }
     return;
   }
@@ -592,34 +662,16 @@ $("rd").addEventListener("click", async e => {
     tag = ok ? "Rollhaven" : "Local (offline)";
   }
 
+  let latest = null;
   for (const r of rolls) {
-    for (const x of r.results) hist.unshift({ f: r.formula, t: x.t, d: x.d, tag });
-  }
-  hist.length = Math.min(hist.length, 6);
-  drawRolls();
-});
-
-function drawRolls() {
-  const box = $("rolls"); box.textContent = ""; box.classList.toggle("on", hist.length > 0);
-  for (const h of hist) {
-    const r = document.createElement("div"); r.className = "r";
-    const t = document.createElement("b"); t.textContent = h.t;
-    const d = document.createElement("span");
-    const parts = (h.f + "  ⟵ " + h.d).split(/(~-?\d+~)/);
-    for (const p of parts) {
-      if (/^~-?\d+~$/.test(p)) {
-        const s = document.createElement("s"); s.textContent = p.slice(1, -1); d.append(s);
-      } else {
-        d.append(p);
-      }
+    for (const x of r.results) {
+      latest = { f: r.formula, t: x.t, d: x.d, tag };
+      hist.unshift(latest);
     }
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = h.tag;
-    r.append(t, d, tag);
-    box.append(r);
   }
-}
+  hist.length = Math.min(hist.length, 8);
+  if (latest) showRollToast(latest);
+});
 
 // ---------- exportar / importar / teste ----------
 function download(name, text, type) {
