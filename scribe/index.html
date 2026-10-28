@@ -26,17 +26,21 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 .it span{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty{color:var(--mute);padding:20px;text-align:center}
 .bar{display:flex;gap:6px;padding:8px 10px;align-items:center;flex-wrap:wrap}
+.tgt-bar{border-bottom:1px solid var(--line);padding:6px 10px;font-size:12px}
+.tgt-bar span{color:var(--mute)}
+.tgt-bar button{padding:3px 8px;font-size:12px}
 #title{flex:1;min-width:120px;font:700 16px Georgia,serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
 #ed{flex:1;min-height:0;margin:0 10px;resize:none;color:var(--ink);background:#17130e;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
 #rd{flex:1;min-height:0;overflow:auto;padding:4px 14px 10px}
 .foot{display:flex;gap:6px;padding:8px 10px;align-items:center;flex-wrap:wrap}
 .foot .sz{margin-left:auto;font-size:12px;color:var(--mute)}
-#rolls{border-top:1px solid var(--line);background:#17130e;max-height:30%;overflow-y:auto;padding:6px 10px;display:none}
+#rolls{border-top:1px solid var(--line);background:#17130e;max-height:35%;overflow-y:auto;padding:6px 10px;display:none}
 #rolls.on{display:block}
 #rolls .r{display:flex;gap:8px;align-items:baseline;padding:2px 0}
 #rolls .r b{font:700 18px Georgia,serif;min-width:30px}
 #rolls .r span{color:var(--mute);font-size:12px;word-break:break-word}
 #rolls .r span s{opacity:.5}
+#rolls .tag{font-size:11px;padding:1px 5px;border-radius:4px;background:var(--panel);color:var(--ac);border:1px solid var(--line);margin-left:auto;white-space:nowrap}
 #tools{display:none;padding:10px;overflow-y:auto;flex-direction:column;gap:8px}
 #tools.on{display:flex}
 #tools .row{display:flex;gap:6px;flex-wrap:wrap}
@@ -67,7 +71,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
   <button id="bmodal" title="Abrir em tela maior">⤢</button>
   <button id="bclose" title="Fechar" hidden>✕</button>
 </header>
-<div id="status">Carregando…</div>
+<div id="status">Conectando ao Owlbear…</div>
 <main>
   <section class="view on" id="v-list">
     <div id="list"></div>
@@ -80,6 +84,12 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
     <div class="bar">
       <button id="mread" class="on">Ler / jogar</button>
       <button id="medit">Editar</button>
+    </div>
+    <div class="bar tgt-bar" id="tgt-bar">
+      <span>Enviar dados para:</span>
+      <button id="tgt-rh" class="on" data-target="rh" title="Enviar para o chat público do Rollhaven">Rollhaven</button>
+      <button id="tgt-ms" data-target="ms" title="Enviar em segredo para o Master Shield (aba Outros)">Master Shield (GM)</button>
+      <button id="tgt-loc" data-target="loc" title="Apenas mostrar nesta nota">Só local</button>
     </div>
     <textarea id="ed" hidden spellcheck="false" aria-label="Texto da nota"></textarea>
     <div id="rd" class="md"></div>
@@ -109,6 +119,9 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 <script type="module">
 const ENG = "https://gaduarte14.github.io/dados/engine.js";
 const P = "com.gaduart.scribe/", LS = "scribe-v1";
+const KEY_ROLLHAVEN = "com.gaduart.bards-dice/rolls";
+const KEY_MS_GM = "com.gaduart.master-shield/g-";
+
 const $ = id => document.getElementById(id);
 const isModal = new URLSearchParams(location.search).get("m") === "1";
 
@@ -116,7 +129,7 @@ const isModal = new URLSearchParams(location.search).get("m") === "1";
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const DICE = "\\d{0,2}[dD](?:\\d+|[fF]|%)(?:(?:kh|kl|dh|dl|k|d|!|r)\\d*)*";
 const DICE_RE = new RegExp("(?<![A-Za-z0-9_])" + DICE + "(?:\\s*[+\\-]\\s*(?:\\d+(?:\\.\\d+)?|" + DICE + "))*(?![A-Za-z0-9_])", "g");
-// Texto corrido: escapa o HTML primeiro e só depois aplica a formatação, então nada digitado vira HTML.
+
 function inline(s) {
   const codes = [];
   s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
@@ -164,14 +177,16 @@ function md(src) {
 
 // ---------- estado ----------
 let state = { ts: 0, notes: [] }, cur = null, mode = "read";
-let OBR = null, obrReady = false, touched = false;
+let me = { name: "Jogador", color: "#e0a44a" };
+let rollTarget = "rh"; // "rh" (Rollhaven) | "ms" (Master Shield) | "loc" (Só local)
+
 const dirty = new Set();
 let eng = null;
 import(ENG).then(m => { eng = m; }).catch(() => {});
 const uid = () => Math.random().toString(36).slice(2, 10);
 const bytes = s => new Blob([s]).size;
 const kb = n => (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
-const LIMIT = 1024 * 1024;   // limite que você informou (1 MB); o teste da aba ⋯ confere o real
+const LIMIT = 1024 * 1024;
 
 function status(t, cls) { const s = $("status"); s.textContent = t; s.className = cls || ""; }
 function localLoad() { try { const v = JSON.parse(localStorage.getItem(LS)); if (v && Array.isArray(v.notes)) return v; } catch {} return null; }
@@ -179,11 +194,31 @@ let lt = null;
 function localSave() { clearTimeout(lt); lt = setTimeout(() => { try { localStorage.setItem(LS, JSON.stringify(state)); } catch { status("Não consegui salvar neste aparelho (armazenamento cheio ou bloqueado).", "warn"); } }, 250); }
 function totalBytes() { return bytes(JSON.stringify(state.notes)); }
 
-// ---------- Owlbear: só as notas mudadas são enviadas ----------
+// ---------- conexão e sincronização padrão Rollhaven ----------
+let OBR, sdkErr;
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) { sdkErr = e; }
+}
+
+const showMsg = t => { const s = $("status"); s.textContent = t; s.className = "warn"; };
+if (!OBR) { showMsg("Erro ao carregar o SDK do Owlbear: " + (sdkErr && sdkErr.message)); }
+
+let isReady = false, resolveReady;
+const ready = new Promise(r => (resolveReady = r));
+const tries = (() => { try { return +sessionStorage.getItem("sc-tries") || 0; } catch { return 0; } })();
+
+const dog = setTimeout(() => {
+  if (tries < 2) { try { sessionStorage.setItem("sc-tries", tries + 1); } catch {} location.reload(); return; }
+  showMsg("O Owlbear não respondeu no celular. ");
+  const b = document.createElement("button"); b.textContent = "Tentar de novo";
+  b.onclick = () => { try { sessionStorage.removeItem("sc-tries"); } catch {} location.reload(); };
+  $("status").append(b);
+}, 12000);
+
 let ot = null;
 function obrSave() { clearTimeout(ot); ot = setTimeout(pushObr, 900); }
 async function pushObr() {
-  if (!obrReady) return;
+  if (!isReady) return;
   if (totalBytes() > LIMIT) { status("Passou de 1 MB: salvando só neste aparelho.", "warn"); return; }
   const upd = {};
   for (const id of dirty) { const n = state.notes.find(x => x.id === id); upd[P + "n-" + id] = n ? { b: n.b, ts: n.ts } : null; }
@@ -191,7 +226,7 @@ async function pushObr() {
   try { await OBR.player.setMetadata(upd); dirty.clear(); status("Salvo no Owlbear e neste aparelho", "ok"); }
   catch (e) { status("O Owlbear recusou salvar (" + ((e && e.message) || "erro") + "). Ficou só neste aparelho.", "warn"); }
 }
-function changed(id) { state.ts = Date.now(); if (id) dirty.add(id); localSave(); obrSave(); status(obrReady ? "Salvando…" : "Salvo neste aparelho (sem conexão com o Owlbear)", obrReady ? "" : "warn"); }
+function changed(id) { state.ts = Date.now(); if (id) dirty.add(id); localSave(); obrSave(); status(isReady ? "Salvando…" : "Salvo neste aparelho (sem conexão)", isReady ? "" : "warn"); }
 
 async function loadFromObr() {
   const meta = await OBR.player.getMetadata();
@@ -204,6 +239,20 @@ async function loadFromObr() {
   if (remote && (!local || remote.ts >= local.ts)) { state = remote; try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} }
   else if (local) { state = local; for (const n of state.notes) dirty.add(n.id); pushObr(); }
   render();
+}
+
+if (OBR) {
+  OBR.onReady(async () => {
+    try {
+      me.name = await OBR.player.getName();
+      me.color = await OBR.player.getColor();
+      OBR.player.onChange(p => { me.name = p.name; me.color = p.color; });
+      await loadFromObr();
+      isReady = true; resolveReady();
+      clearTimeout(dog); try { sessionStorage.removeItem("sc-tries"); } catch {}
+      status("Salvo no Owlbear e neste aparelho", "ok");
+    } catch (e) { showMsg("Erro ao iniciar: " + ((e && e.message) || e)); }
+  });
 }
 
 // ---------- telas ----------
@@ -226,19 +275,20 @@ function setMode(m) {
   mode = m; const n = state.notes.find(x => x.id === cur);
   $("mread").classList.toggle("on", m === "read"); $("medit").classList.toggle("on", m === "edit");
   $("ed").hidden = m !== "edit"; $("rd").hidden = m !== "read";
+  $("tgt-bar").hidden = m !== "read";
   if (m === "read" && n) $("rd").innerHTML = md(n.b) || '<p class="sub">(nota vazia)</p>';
 }
 function sz() { $("sz").textContent = kb(totalBytes()) + " de 1 MB"; }
 
 $("bnew").onclick = () => {
-  const n = { id: uid(), t: "Nova nota", b: "", ts: Date.now() }; state.notes.unshift(n); touched = true; changed(n.id); render(); openNote(n.id, "edit"); $("ed").focus();
+  const n = { id: uid(), t: "Nova nota", b: "", ts: Date.now() }; state.notes.unshift(n); changed(n.id); render(); openNote(n.id, "edit"); $("ed").focus();
 };
 $("list").onclick = e => { const b = e.target.closest(".it"); if (b) openNote(b.dataset.id, "read"); };
 $("bback").onclick = () => { cur = null; render(); show("v-list"); };
 $("mread").onclick = () => setMode("read");
 $("medit").onclick = () => { setMode("edit"); $("ed").focus(); };
-$("title").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; touched = true; n.t = e.target.value; n.ts = Date.now(); changed(n.id); };
-$("ed").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; touched = true; n.b = e.target.value; n.ts = Date.now(); changed(n.id); sz(); };
+$("title").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; n.t = e.target.value; n.ts = Date.now(); changed(n.id); };
+$("ed").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; n.b = e.target.value; n.ts = Date.now(); changed(n.id); sz(); };
 let delArm = null;
 $("bdel").onclick = () => {
   const b = $("bdel");
@@ -247,15 +297,110 @@ $("bdel").onclick = () => {
   state.notes = state.notes.filter(x => x.id !== cur); changed(cur); cur = null; render(); show("v-list");
 };
 
-// ---------- rolagem interna (nesta etapa só aparece aqui, na própria Scribe!) ----------
+// Seletor de destino de rolagem
+$("tgt-bar").onclick = e => {
+  const b = e.target.closest("button[data-target]");
+  if (!b) return;
+  rollTarget = b.dataset.target;
+  $("tgt-bar").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+};
+
+// ---------- rolagens integradas (Rollhaven, Master Shield e Local) ----------
 const hist = [];
+
+async function ensureConnected() {
+  if (isReady) return true;
+  status("Conectando ao Owlbear…");
+  await Promise.race([ready, new Promise(r => setTimeout(r, 8000))]);
+  if (!isReady) {
+    status("Ainda conectando ao Owlbear. Tente rolar de novo em alguns segundos.", "warn");
+    return false;
+  }
+  return true;
+}
+
+async function sendToRollhaven(rolls) {
+  if (!(await ensureConnected())) return false;
+  let mine = [];
+  try {
+    const meta = await OBR.player.getMetadata();
+    if (Array.isArray(meta[KEY_ROLLHAVEN])) mine = meta[KEY_ROLLHAVEN];
+  } catch {}
+  mine.push({
+    id: Math.random().toString(36).slice(2, 10),
+    ts: Date.now(),
+    name: me.name || "Jogador",
+    color: me.color || "#e0a44a",
+    rolls
+  });
+  while (mine.length > 10 || (mine.length > 1 && JSON.stringify(mine).length > 7000)) mine.shift();
+  try {
+    await OBR.player.setMetadata({ [KEY_ROLLHAVEN]: mine });
+    return true;
+  } catch (err) {
+    status("Não consegui compartilhar a rolagem no Rollhaven.", "warn");
+    return false;
+  }
+}
+
+async function sendToMasterShield(formula, label) {
+  if (!(await ensureConnected())) return false;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const curNote = state.notes.find(x => x.id === cur);
+  const payload = {
+    id,
+    formula,
+    mode: null,
+    quem: me.name || "Jogador",
+    rotulo: label || (curNote ? curNote.t : "Scribe!"),
+    pers: curNote ? curNote.t : "",
+    ts: Date.now()
+  };
+  try {
+    await OBR.room.setMetadata({ [KEY_MS_GM + id]: payload });
+    return true;
+  } catch (err) {
+    status("Não consegui enviar para o Master Shield.", "warn");
+    return false;
+  }
+}
+
 $("rd").addEventListener("click", async e => {
   const b = e.target.closest(".dice"); if (!b) return;
+  const curNote = state.notes.find(x => x.id === cur);
+  const label = curNote ? curNote.t : "";
+
+  // No modo Master Shield (GM), quem sorteia o dado é o próprio Master Shield do mestre
+  if (rollTarget === "ms") {
+    const ok = await sendToMasterShield(b.dataset.f, label);
+    if (ok) {
+      hist.unshift({ f: b.dataset.f, t: "🎲", d: "Rolagem secreta enviada ao Mestre", tag: "Master Shield (GM)" });
+      hist.length = Math.min(hist.length, 6);
+      drawRolls();
+    }
+    return;
+  }
+
   if (!eng) { try { eng = await import(ENG); } catch { status("Não consegui carregar o motor de dados.", "warn"); return; } }
-  let rolls; try { rolls = eng.rollInput(b.dataset.f); } catch (er) { status("Não entendi a rolagem: " + er.message, "warn"); return; }
-  for (const r of rolls) for (const x of r.results) hist.unshift({ f: r.formula, t: x.t, d: x.d });
-  hist.length = Math.min(hist.length, 6); drawRolls();
+  
+  const rollText = b.dataset.f + (label ? " " + label : "");
+  let rolls; 
+  try { rolls = eng.rollInput(rollText); } 
+  catch (er) { status("Não entendi a rolagem: " + er.message, "warn"); return; }
+
+  let tag = "Local";
+  if (rollTarget === "rh") {
+    const ok = await sendToRollhaven(rolls);
+    tag = ok ? "Rollhaven" : "Local (offline)";
+  }
+
+  for (const r of rolls) {
+    for (const x of r.results) hist.unshift({ f: r.formula, t: x.t, d: x.d, tag });
+  }
+  hist.length = Math.min(hist.length, 6);
+  drawRolls();
 });
+
 function drawRolls() {
   const box = $("rolls"); box.textContent = ""; box.classList.toggle("on", hist.length > 0);
   for (const h of hist) {
@@ -263,8 +408,18 @@ function drawRolls() {
     const t = document.createElement("b"); t.textContent = h.t;
     const d = document.createElement("span");
     const parts = (h.f + "  ⟵ " + h.d).split(/(~-?\d+~)/);
-    for (const p of parts) { if (/^~-?\d+~$/.test(p)) { const s = document.createElement("s"); s.textContent = p.slice(1, -1); d.append(s); } else d.append(p); }
-    r.append(t, d); box.append(r);
+    for (const p of parts) { 
+      if (/^~-?\d+~$/.test(p)) { 
+        const s = document.createElement("s"); s.textContent = p.slice(1, -1); d.append(s); 
+      } else {
+        d.append(p); 
+      }
+    }
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = h.tag;
+    r.append(t, d, tag);
+    box.append(r);
   }
 }
 
@@ -285,14 +440,14 @@ $("file").onchange = async e => {
     else add.push({ t: fname(f.name.replace(/\.[^.]+$/, "")), b: txt });
   } catch { $("tout").textContent = "Arquivo inválido."; return; }
   for (const a of add) { const n = { id: uid(), t: a.t, b: a.b, ts: Date.now() }; state.notes.unshift(n); dirty.add(n.id); }
-  touched = true; changed(); render(); $("tout").textContent = add.length + " nota(s) importada(s).";
+  changed(); render(); $("tout").textContent = add.length + " nota(s) importada(s).";
 };
 $("btools").onclick = () => show("tools");
 $("tback").onclick = () => { render(); show("v-list"); };
 $("ttest").onclick = () => { $("twarn").hidden = false; $("tconf").hidden = false; };
 $("tconf").onclick = async () => {
   $("tconf").hidden = true; $("twarn").hidden = true;
-  if (!obrReady) { $("tout").textContent = "Sem conexão com o Owlbear."; return; }
+  if (!isReady) { $("tout").textContent = "Sem conexão com o Owlbear."; return; }
   let ok = 0, fail = 0, msg = "";
   for (const s of [8e3, 16e3, 32e3, 64e3, 128e3, 256e3, 512e3, 1e6, 1.1e6]) {
     $("tout").textContent = "Testando " + kb(s) + "…";
@@ -310,25 +465,11 @@ $("bmodal").onclick = async () => {
   if (!OBR) return;
   try { await pushObr(); await OBR.modal.open({ id: P + "modal", url: "/scribe/index.html?m=1", width: 900, height: 700 }); await OBR.action.close(); } catch {}
 };
-$("bclose").onclick = async () => { clearTimeout(lt); try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} if (OBR) { try { await pushObr(); await OBR.modal.close(P + "modal"); } catch {} } };
+$("bclose").onclick = async () => { 
+  clearTimeout(lt); try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} 
+  if (OBR) { try { await pushObr(); await OBR.modal.close(P + "modal"); } catch {} } 
+};
 
-// ---------- começa já com o que está salvo no aparelho; conecta ao Owlbear em seguida ----------
-{ const l = localLoad(); if (l) state = l; render(); status("Conectando ao Owlbear…"); }
-const tries = (() => { try { return +sessionStorage.getItem("sc-tries") || 0; } catch { return 0; } })();
-const dog = setTimeout(() => {
-  if (obrReady) return;
-  if (tries < 2 && !touched) { try { sessionStorage.setItem("sc-tries", tries + 1); } catch {} location.reload(); return; }
-  status("Sem conexão com o Owlbear. Suas notas estão sendo salvas só neste aparelho.", "warn");
-}, 12000);
-for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
-  try { OBR = (await import(u)).default; break; } catch (e) {}
-}
-if (OBR) OBR.onReady(async () => {
-  try {
-    obrReady = true; clearTimeout(dog);
-    await loadFromObr();
-    try { sessionStorage.removeItem("sc-tries"); } catch {}
-    status("Salvo no Owlbear e neste aparelho", "ok");
-  } catch (e) { obrReady = false; status("Erro ao ler do Owlbear: " + ((e && e.message) || e), "warn"); }
-});
+// Início imediato do cache local
+{ const l = localLoad(); if (l) state = l; render(); }
 </script></body></html>
