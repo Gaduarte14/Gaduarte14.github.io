@@ -31,13 +31,19 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
 .it .bdg.ficha{border-color:var(--ac);color:var(--ac)}
 .it span.sub{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .empty{color:var(--mute);padding:20px;text-align:center}
-.bar{display:flex;gap:5px;padding:6px 10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.bar{display:flex;gap:5px;padding:5px 10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)}
 .ficha-panel{border-bottom:1px solid var(--line);background:#1b1610;padding:5px 10px;display:flex;flex-direction:column;gap:5px}
 .ficha-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:12px}
 .ficha-row span.lbl{color:var(--mute)}
 .ficha-row button{padding:2px 7px;font-size:12px}
+.ficha-row input[type=number]{width:50px;text-align:center;font:700 12px system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 4px}
+.hp-grp{display:flex;align-items:center;gap:4px}
+.hp-grp input.pv-in{border-color:#5a8f56;color:var(--ok)}
+.hp-grp input.pvt-in{border-color:#5b7ea8;color:#9bc2f0}
+.dmg-grp{display:flex;align-items:center;gap:4px;margin-left:auto}
+.dmg-grp input.dmg-in{width:52px;border-color:#8a4343;color:var(--bad)}
+.dmg-grp button{background:var(--bad);border-color:var(--bad);color:#1f1a14;font-weight:700}
 .ini-box{display:flex;align-items:center;gap:4px;margin-right:auto}
-.ini-box input{width:46px;text-align:center;font:700 12px system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 4px}
 #title{flex:1;min-width:90px;font:700 15px Georgia,serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 7px}
 #ed{flex:1;min-height:0;margin:6px 10px 0;resize:none;color:var(--ink);background:#17130e;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
 #rd{flex:1;min-height:0;overflow:auto;padding:6px 14px 12px}
@@ -115,6 +121,22 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
 
     <!-- Painel exclusivo do modo FICHA -->
     <div class="ficha-panel" id="ficha-panel" hidden>
+      <!-- Linha 1: Vida, Vida Temporária e Caixa de Dano -->
+      <div class="ficha-row">
+        <div class="hp-grp">
+          <span class="lbl">❤️ Vida:</span>
+          <input id="hp-cur" class="pv-in" type="number" min="0" value="10" title="Vida atual (PV)">
+          <span class="lbl">🛡️ Temp:</span>
+          <input id="hp-temp" class="pvt-in" type="number" min="0" value="0" title="Vida temporária (gasta primeiro)">
+        </div>
+        <div class="dmg-grp">
+          <span class="lbl">💥 Dano:</span>
+          <input id="dmg-in" class="dmg-in" type="number" min="0" placeholder="0" title="Quantidade de dano sofrido">
+          <button id="btn-dmg" title="Descontar dano (primeiro da Vida Temp e o resto da Vida normal)">OK</button>
+        </div>
+      </div>
+
+      <!-- Linha 2: Iniciativa (Warpath) e Vantagem / Desvantagem -->
       <div class="ficha-row">
         <div class="ini-box">
           <button id="btn-ini" class="pri" title="Rola 1d20 + modificador e envia direto para o Warpath e Rollhaven">⚔️ Iniciativa (<span id="ini-lbl">+0</span>)</button>
@@ -124,6 +146,8 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
         <button id="btn-adv" data-m="adv" title="Rolar com Vantagem (2d20kh1)">Vantagem</button>
         <button id="btn-dis" data-m="dis" title="Rolar com Desvantagem (2d20kl1)">Desv.</button>
       </div>
+
+      <!-- Linha 3: Destino das rolagens -->
       <div class="ficha-row" id="tgt-bar">
         <span class="lbl">Enviar:</span>
         <button class="on" data-target="rh" title="Enviar para o chat público do Rollhaven">Rollhaven</button>
@@ -178,9 +202,12 @@ const P = "com.gaduart.scribe/", LS = "scribe-v1";
 const KEY_ROLLHAVEN = "com.gaduart.bards-dice/rolls";
 const KEY_WARPATH = "com.gaduart.warpath/init";
 const KEY_MS_GM = "com.gaduart.master-shield/g-";
+const KEY_MS_DMG = "com.gaduart.master-shield/d-";
+const KEY_MS_ACK = "com.gaduart.master-shield/a-";
 
 const $ = id => document.getElementById(id);
 const sg = n => (n >= 0 ? "+" : "") + n;
+const nrm = s => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 const isModal = new URLSearchParams(location.search).get("m") === "1";
 
 //LOGIC-START
@@ -234,11 +261,21 @@ function md(src, clickable = true) {
   }
   return out.join("");
 }
+
+// Calcula desconto na Vida Temporária primeiro e o restante na Vida normal (para em 0)
+function calcDamage(pvAtual, pvTemp, danoTotal) {
+  let d = Math.max(0, Math.floor(Number(danoTotal)) || 0);
+  const antes = Math.max(0, Math.floor(Number(pvAtual)) || 0);
+  const t = Math.max(0, Math.floor(Number(pvTemp)) || 0);
+  const abs = Math.min(t, d);
+  d -= abs;
+  return { antes, depois: Math.max(0, antes - d), abs, pvtDepois: t - abs };
+}
 //LOGIC-END
 
 const FICHA_TEMPLATE = `-# Raça · Classe Nível 1 · Antecedente
 
-**CA:** 15 | **PV:** 12 / 12 | **Deslocamento:** 9m
+**CA:** 15 | **PV Máx:** 12 | **Deslocamento:** 9m
 
 ---
 
@@ -312,11 +349,11 @@ async function pushObr() {
   const upd = {};
   for (const id of dirty) {
     const n = state.notes.find(x => x.id === id);
-    upd[P + "n-" + id] = n ? { b: n.b, ts: n.ts, tp: n.tp || "ficha", ini: Number(n.ini) || 0 } : null;
+    upd[P + "n-" + id] = n ? { b: n.b, ts: n.ts, tp: n.tp || "ficha", ini: Number(n.ini) || 0, pv: Number(n.pv ?? 10), pvt: Number(n.pvt || 0) } : null;
   }
   upd[P + "idx"] = {
     ts: state.ts,
-    items: state.notes.map(n => ({ id: n.id, t: n.t, tp: n.tp || "ficha", ini: Number(n.ini) || 0 }))
+    items: state.notes.map(n => ({ id: n.id, t: n.t, tp: n.tp || "ficha", ini: Number(n.ini) || 0, pv: Number(n.pv ?? 10), pvt: Number(n.pvt || 0) }))
   };
   try { await OBR.player.setMetadata(upd); dirty.clear(); status("Salvo no Owlbear e neste aparelho", "ok"); }
   catch (e) { status("O Owlbear recusou salvar (" + ((e && e.message) || "erro") + "). Ficou só neste aparelho.", "warn"); }
@@ -338,6 +375,8 @@ async function loadFromObr() {
           t: it.t,
           tp: it.tp || n.tp || "ficha",
           ini: Number(it.ini ?? n.ini) || 0,
+          pv: Number(it.pv ?? n.pv ?? 10),
+          pvt: Number(it.pvt ?? n.pvt ?? 0),
           b: n.b || "",
           ts: n.ts || 0
         };
@@ -347,6 +386,28 @@ async function loadFromObr() {
   if (remote && (!local || remote.ts >= local.ts)) { state = remote; try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} }
   else if (local) { state = local; for (const n of state.notes) dirty.add(n.id); pushObr(); }
   render();
+}
+
+// Recebe dano enviado pelo Master Shield do mestre (se o nome da ficha bater)
+let msDone = new Set(), msRoomMeta = {};
+try { msDone = new Set(JSON.parse(sessionStorage.getItem("sc-ms-done") || "[]")); } catch {}
+
+function scanMasterShieldDamage(m) {
+  msRoomMeta = m || {};
+  for (const [k, v] of Object.entries(msRoomMeta)) {
+    if (!k.startsWith(KEY_MS_DMG) || !v || typeof v !== "object" || !v.id || msDone.has(v.id) || Date.now() - (v.ts || 0) > 864e5) continue;
+    const ficha = state.notes.find(n => (n.tp || "ficha") === "ficha" && nrm(n.t) === v.nome);
+    if (!ficha) continue;
+    msDone.add(v.id);
+    try { sessionStorage.setItem("sc-ms-done", JSON.stringify([...msDone].slice(-200))); } catch {}
+    const res = applyDamageToNote(ficha, v.total, "Master Shield");
+    if (OBR && isReady) {
+      OBR.room.setMetadata({
+        [k]: null,
+        [KEY_MS_ACK + v.id]: { id: v.id, antes: res.antes, depois: res.depois, abs: res.abs, ts: Date.now() }
+      }).catch(() => {});
+    }
+  }
 }
 
 if (OBR) {
@@ -359,6 +420,8 @@ if (OBR) {
       isReady = true; resolveReady();
       clearTimeout(dog); try { sessionStorage.removeItem("sc-tries"); } catch {}
       status("Salvo no Owlbear e neste aparelho", "ok");
+      scanMasterShieldDamage(await OBR.room.getMetadata());
+      OBR.room.onMetadataChange(scanMasterShieldDamage);
     } catch (e) { showMsg("Erro ao iniciar: " + ((e && e.message) || e)); }
   });
 }
@@ -379,7 +442,7 @@ function render() {
     const t = document.createElement("b"); t.textContent = n.t || (isFicha ? "Sem nome" : "Sem título");
     const bdg = document.createElement("span");
     bdg.className = "bdg " + (isFicha ? "ficha" : "nota");
-    bdg.textContent = isFicha ? "📜 Ficha" : "📝 Nota";
+    bdg.textContent = isFicha ? `📜 Ficha · ❤️ ${n.pv ?? 10}` : "📝 Nota";
     hd.append(t, bdg);
     const s = document.createElement("span"); s.className = "sub";
     s.textContent = (n.b || "").replace(/\s+/g, " ").slice(0, 80) || "(vazia)";
@@ -387,20 +450,25 @@ function render() {
   }
 }
 
-function syncIniUI(n) {
-  const val = Number(n?.ini) || 0;
-  $("ini-mod").value = val;
-  $("ini-lbl").textContent = sg(val);
+function syncFichaFieldsUI(n) {
+  const ini = Number(n?.ini) || 0;
+  $("ini-mod").value = ini;
+  $("ini-lbl").textContent = sg(ini);
+  $("hp-cur").value = Math.max(0, Number(n?.pv ?? 10));
+  $("hp-temp").value = Math.max(0, Number(n?.pvt || 0));
+  $("dmg-in").value = "";
 }
 
 function openNote(id, m) {
   cur = id;
   const n = state.notes.find(x => x.id === id); if (!n) return;
   if (!n.tp) n.tp = "ficha";
+  if (n.pv === undefined) n.pv = 10;
+  if (n.pvt === undefined) n.pvt = 0;
   $("title").value = n.t;
   $("title").placeholder = n.tp === "ficha" ? "Nome do personagem" : "Título da anotação";
   $("ed").value = n.b;
-  syncIniUI(n);
+  syncFichaFieldsUI(n);
   setMode(m || "read");
   show("v-note");
   sz();
@@ -434,6 +502,8 @@ function createItem(tp) {
     t: isFicha ? "Novo Personagem" : "Nova Anotação",
     tp,
     ini: 0,
+    pv: 12,
+    pvt: 0,
     b: isFicha ? FICHA_TEMPLATE : "",
     ts: Date.now()
   };
@@ -459,8 +529,59 @@ $("list").onclick = e => { const b = e.target.closest(".it"); if (b) openNote(b.
 $("bback").onclick = () => { cur = null; $("roll-toast").classList.remove("on"); $("rolls-pop").classList.remove("on"); render(); show("v-list"); };
 $("mread").onclick = () => setMode("read");
 $("medit").onclick = () => { setMode("edit"); $("ed").focus(); };
-$("title").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; n.t = e.target.value; n.ts = Date.now(); changed(n.id); };
+$("title").oninput = e => {
+  const n = state.notes.find(x => x.id === cur); if (!n) return;
+  n.t = e.target.value; n.ts = Date.now(); changed(n.id);
+  scanMasterShieldDamage(msRoomMeta);
+};
 $("ed").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; n.b = e.target.value; n.ts = Date.now(); changed(n.id); sz(); };
+
+// ---------- Vida, Vida Temporária e Caixa de Dano ----------
+$("hp-cur").oninput = e => {
+  const n = state.notes.find(x => x.id === cur); if (!n) return;
+  n.pv = Math.max(0, parseInt(e.target.value, 10) || 0);
+  n.ts = Date.now(); changed(n.id);
+};
+$("hp-temp").oninput = e => {
+  const n = state.notes.find(x => x.id === cur); if (!n) return;
+  n.pvt = Math.max(0, parseInt(e.target.value, 10) || 0);
+  n.ts = Date.now(); changed(n.id);
+};
+
+function applyDamageToNote(n, rawDmg, sourceTag = "Dano") {
+  const dmg = Math.max(0, Math.floor(Number(rawDmg)) || 0);
+  const res = calcDamage(n.pv ?? 10, n.pvt || 0, dmg);
+  n.pv = res.depois;
+  n.pvt = res.pvtDepois;
+  n.ts = Date.now();
+  changed(n.id);
+  if (cur === n.id) {
+    $("hp-cur").value = n.pv;
+    $("hp-temp").value = n.pvt;
+  }
+  const absTxt = res.abs > 0 ? ` (${res.abs} na Temp)` : "";
+  const entry = {
+    f: `−${dmg} de dano${absTxt}`,
+    t: `❤️ ${res.depois}`,
+    d: `Vida ${res.antes} → ${res.depois} · Temp: ${res.pvtDepois}`,
+    tag: sourceTag
+  };
+  hist.unshift(entry);
+  hist.length = Math.min(hist.length, 8);
+  showRollToast(entry);
+  return res;
+}
+
+function confirmManualDamage() {
+  const n = state.notes.find(x => x.id === cur); if (!n) return;
+  const dmg = parseInt($("dmg-in").value, 10) || 0;
+  if (dmg <= 0) { $("dmg-in").value = ""; return; }
+  applyDamageToNote(n, dmg, "Dano aplicado");
+  $("dmg-in").value = ""; // Zera a caixa de dano após confirmar
+}
+
+$("btn-dmg").onclick = confirmManualDamage;
+$("dmg-in").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); confirmManualDamage(); } });
 
 // Alterar o modificador de Iniciativa na Ficha
 $("ini-mod").oninput = e => {
@@ -680,7 +801,10 @@ function download(name, text, type) {
 }
 const fname = s => (s || "nota").replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 60) || "nota";
 $("bexp").onclick = () => { const n = state.notes.find(x => x.id === cur); if (n) download(fname(n.t) + ".md", n.b, "text/markdown"); };
-$("texpall").onclick = () => download("scribe-notas.json", JSON.stringify({ v: 1, notes: state.notes.map(n => ({ t: n.t, tp: n.tp || "ficha", ini: Number(n.ini) || 0, b: n.b })) }, null, 1), "application/json");
+$("texpall").onclick = () => download("scribe-notas.json", JSON.stringify({
+  v: 1,
+  notes: state.notes.map(n => ({ t: n.t, tp: n.tp || "ficha", ini: Number(n.ini) || 0, pv: Number(n.pv ?? 10), pvt: Number(n.pvt || 0), b: n.b }))
+}, null, 1), "application/json");
 $("timp").onclick = () => $("file").click();
 $("file").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -688,12 +812,24 @@ $("file").onchange = async e => {
   try {
     if (/\.json$/i.test(f.name)) {
       const j = JSON.parse(txt);
-      for (const n of (j.notes || [])) add.push({ t: String(n.t || "Importada").slice(0, 80), tp: n.tp === "nota" ? "nota" : "ficha", ini: Number(n.ini) || 0, b: String(n.b || "") });
+      for (const n of (j.notes || [])) {
+        add.push({
+          t: String(n.t || "Importada").slice(0, 80),
+          tp: n.tp === "nota" ? "nota" : "ficha",
+          ini: Number(n.ini) || 0,
+          pv: Number(n.pv ?? 12),
+          pvt: Number(n.pvt || 0),
+          b: String(n.b || "")
+        });
+      }
     } else {
-      add.push({ t: fname(f.name.replace(/\.[^.]+$/, "")), tp: "ficha", ini: 0, b: txt });
+      add.push({ t: fname(f.name.replace(/\.[^.]+$/, "")), tp: "ficha", ini: 0, pv: 12, pvt: 0, b: txt });
     }
   } catch { $("tout").textContent = "Arquivo inválido."; return; }
-  for (const a of add) { const n = { id: uid(), t: a.t, tp: a.tp, ini: a.ini, b: a.b, ts: Date.now() }; state.notes.unshift(n); dirty.add(n.id); }
+  for (const a of add) {
+    const n = { id: uid(), t: a.t, tp: a.tp, ini: a.ini, pv: a.pv, pvt: a.pvt, b: a.b, ts: Date.now() };
+    state.notes.unshift(n); dirty.add(n.id);
+  }
   changed(); render(); $("tout").textContent = add.length + " item(ns) importado(s).";
 };
 $("btools").onclick = () => show("tools");
