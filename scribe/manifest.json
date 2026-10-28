@@ -1,0 +1,15 @@
+{
+  "name": "Scribe!",
+  "version": "0.1.0",
+  "manifest_version": 1,
+  "description": "Notas e fichas em texto com markdown estilo Discord e rolagens de dados clicáveis.",
+  "author": "Gaduart",
+  "icon": "/scribe/icon.png",
+  "action": {
+    "title": "Scribe!",
+    "icon": "/scribe/action-icon.svg",
+    "popover": "/scribe/index.html",
+    "height": 580,
+    "width": 400
+  }
+}

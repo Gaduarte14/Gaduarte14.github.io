@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scribe!</title>
+<style>
+:root{--bg:#1f1a14;--panel:#2b241b;--line:#4a3d2c;--ink:#f1e8d6;--mute:#a89a82;--ac:#e8943a;--ok:#8fc98a;--bad:#e57a7a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+header{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+header h1{font:700 18px Georgia,serif;margin:0 auto 0 0;color:var(--ac)}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--ac)}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ac)}
+button.pri{background:var(--ac);border-color:var(--ac);color:#1f1a14;font-weight:700}
+button.bad{border-color:var(--bad);color:var(--bad)}
+button.on{background:var(--ac);border-color:var(--ac);color:#1f1a14;font-weight:700}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+#status{font-size:12px;color:var(--mute);padding:3px 10px;border-bottom:1px solid var(--line)}
+#status.ok{color:var(--ok)}#status.warn{color:var(--bad)}
+.view{flex:1;min-height:0;display:none;flex-direction:column}
+.view.on{display:flex}
+#list{overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.it{display:block;width:100%;text-align:left;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.it b{display:block;font:700 15px Georgia,serif}
+.it span{display:block;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{color:var(--mute);padding:20px;text-align:center}
+.bar{display:flex;gap:6px;padding:8px 10px;align-items:center;flex-wrap:wrap}
+#title{flex:1;min-width:120px;font:700 16px Georgia,serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+#ed{flex:1;min-height:0;margin:0 10px;resize:none;color:var(--ink);background:#17130e;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+#rd{flex:1;min-height:0;overflow:auto;padding:4px 14px 10px}
+.foot{display:flex;gap:6px;padding:8px 10px;align-items:center;flex-wrap:wrap}
+.foot .sz{margin-left:auto;font-size:12px;color:var(--mute)}
+#rolls{border-top:1px solid var(--line);background:#17130e;max-height:30%;overflow-y:auto;padding:6px 10px;display:none}
+#rolls.on{display:block}
+#rolls .r{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+#rolls .r b{font:700 18px Georgia,serif;min-width:30px}
+#rolls .r span{color:var(--mute);font-size:12px;word-break:break-word}
+#rolls .r span s{opacity:.5}
+#tools{display:none;padding:10px;overflow-y:auto;flex-direction:column;gap:8px}
+#tools.on{display:flex}
+#tools .row{display:flex;gap:6px;flex-wrap:wrap}
+#tools p{margin:0;color:var(--mute);font-size:13px}
+#tout{font-size:13px;white-space:pre-wrap}
+/* markdown */
+.md h1,.md h2,.md h3{font-family:Georgia,serif;margin:.7em 0 .3em;color:var(--ac)}
+.md h1{font-size:22px;border-bottom:1px solid var(--line);padding-bottom:3px}.md h2{font-size:18px}.md h3{font-size:15px}
+.md p{margin:.4em 0}
+.md .sub{font-size:12px;color:var(--mute);margin:.3em 0}
+.md blockquote{margin:.5em 0;padding:2px 10px;border-left:3px solid var(--ac);background:rgba(232,148,58,.08);color:#e5dac4}
+.md ul,.md ol{margin:.4em 0;padding-left:22px}
+.md hr{border:0;border-top:1px solid var(--line);margin:.8em 0}
+.md code{background:#17130e;border:1px solid var(--line);border-radius:4px;padding:0 4px;font:12.5px ui-monospace,Consolas,monospace}
+.md pre{background:#17130e;border:1px solid var(--line);border-radius:6px;padding:8px;overflow-x:auto;margin:.5em 0}
+.md pre code{border:0;padding:0}
+.md .tw{overflow-x:auto;margin:.5em 0}
+.md table{border-collapse:collapse;min-width:100%}
+.md th,.md td{border:1px solid var(--line);padding:4px 8px;text-align:left;white-space:nowrap}
+.md th{background:var(--panel);color:var(--ac)}
+.dice{font:inherit;font-weight:600;color:#1f1a14;background:var(--ac);border:0;border-radius:5px;padding:0 6px;cursor:pointer}
+.dice:hover{filter:brightness(1.1)}
+</style></head><body>
+<header>
+  <h1>Scribe!</h1>
+  <button id="bnew" class="pri">+ Nova nota</button>
+  <button id="btools" title="Exportar, importar e testes">⋯</button>
+  <button id="bmodal" title="Abrir em tela maior">⤢</button>
+  <button id="bclose" title="Fechar" hidden>✕</button>
+</header>
+<div id="status">Carregando…</div>
+<main>
+  <section class="view on" id="v-list">
+    <div id="list"></div>
+  </section>
+  <section class="view" id="v-note">
+    <div class="bar">
+      <button id="bback">← Notas</button>
+      <input id="title" type="text" maxlength="80" aria-label="Título da nota">
+    </div>
+    <div class="bar">
+      <button id="mread" class="on">Ler / jogar</button>
+      <button id="medit">Editar</button>
+    </div>
+    <textarea id="ed" hidden spellcheck="false" aria-label="Texto da nota"></textarea>
+    <div id="rd" class="md"></div>
+    <div class="foot">
+      <button id="bexp">Exportar .md</button>
+      <button id="bdel" class="bad">Apagar</button>
+      <span class="sz" id="sz"></span>
+    </div>
+  </section>
+  <section class="view" id="tools">
+    <div class="row"><button id="tback">← Notas</button></div>
+    <p>Suas notas ficam no Owlbear e também neste aparelho. Só você vê as suas na tela.</p>
+    <div class="row">
+      <button id="texpall">Exportar tudo (.json)</button>
+      <button id="timp">Importar (.md / .json)</button>
+      <input id="file" type="file" accept=".md,.json,.txt,text/markdown,application/json" hidden>
+    </div>
+    <div class="row">
+      <button id="ttest">Testar limite do Owlbear</button>
+      <button id="tconf" class="bad" hidden>Confirmar teste</button>
+    </div>
+    <p id="twarn" hidden>O teste grava um texto grande temporário no seu metadata, que o Owlbear sincroniza com a sala toda. Rode com a mesa parada. Ele apaga tudo no final.</p>
+    <div id="tout"></div>
+  </section>
+</main>
+<div id="rolls" aria-live="polite"></div>
+<script type="module">
+const ENG = "https://gaduarte14.github.io/dados/engine.js";
+const P = "com.gaduart.scribe/", LS = "scribe-v1";
+const $ = id => document.getElementById(id);
+const isModal = new URLSearchParams(location.search).get("m") === "1";
+
+//LOGIC-START
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const DICE = "\\d{0,2}[dD](?:\\d+|[fF]|%)(?:(?:kh|kl|dh|dl|k|d|!|r)\\d*)*";
+const DICE_RE = new RegExp("(?<![A-Za-z0-9_])" + DICE + "(?:\\s*[+\\-]\\s*(?:\\d+(?:\\.\\d+)?|" + DICE + "))*(?![A-Za-z0-9_])", "g");
+// Texto corrido: escapa o HTML primeiro e só depois aplica a formatação, então nada digitado vira HTML.
+function inline(s) {
+  const codes = [];
+  s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+  s = esc(s);
+  s = s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/__(.+?)__/g, "<u>$1</u>").replace(/~~(.+?)~~/g, "<s>$1</s>")
+    .replace(/(^|[^*])\*(?!\s)(.+?)(?<!\s)\*(?!\*)/g, "$1<i>$2</i>");
+  s = s.split(/(<[^>]+>)/).map(p => p[0] === "<" ? p : p.replace(DICE_RE, m => '<button class="dice" data-f="' + m + '">' + m + "</button>")).join("");
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + esc(codes[i]) + "</code>");
+}
+const isSep = l => l.includes("-") && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l);
+const cells = l => { l = l.trim(); if (l.startsWith("|")) l = l.slice(1); if (l.endsWith("|")) l = l.slice(0, -1); return l.split("|").map(c => c.trim()); };
+const isList = l => /^\s*([-*]|\d+\.)\s+/.test(l);
+function md(src) {
+  const L = String(src).replace(/\r/g, "").split("\n"), out = [];
+  const startsBlock = (l, n) => /^```/.test(l) || /^#{1,3}\s/.test(l) || /^-#\s/.test(l) || /^>/.test(l) || isList(l) || /^\s*---+\s*$/.test(l) || (l.includes("|") && n !== undefined && isSep(n));
+  for (let i = 0; i < L.length;) {
+    const l = L[i];
+    if (/^```/.test(l)) { const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]); i++; out.push("<pre><code>" + esc(b.join("\n")) + "</code></pre>"); continue; }
+    if (/^\s*---+\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
+    let m;
+    if ((m = /^(#{1,3})\s+(.*)$/.exec(l))) { out.push("<h" + m[1].length + ">" + inline(m[2]) + "</h" + m[1].length + ">"); i++; continue; }
+    if ((m = /^-#\s+(.*)$/.exec(l))) { out.push('<div class="sub">' + inline(m[1]) + "</div>"); i++; continue; }
+    if (/^>/.test(l)) { const b = []; while (i < L.length && /^>/.test(L[i])) b.push(L[i++].replace(/^>\s?/, "")); out.push("<blockquote>" + b.map(inline).join("<br>") + "</blockquote>"); continue; }
+    if (l.includes("|") && i + 1 < L.length && isSep(L[i + 1])) {
+      const head = cells(l); i += 2; const rows = [];
+      while (i < L.length && L[i].includes("|") && L[i].trim()) rows.push(cells(L[i++]));
+      out.push('<div class="tw"><table><thead><tr>' + head.map(c => "<th>" + inline(c) + "</th>").join("") + "</tr></thead><tbody>" +
+        rows.map(r => "<tr>" + head.map((_, k) => "<td>" + inline(r[k] || "") + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>");
+      continue;
+    }
+    if (isList(l)) {
+      const ord = /^\s*\d+\./.test(l), items = [];
+      while (i < L.length && isList(L[i]) && /^\s*\d+\./.test(L[i]) === ord) items.push(L[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+      out.push((ord ? "<ol>" : "<ul>") + items.map(t => "<li>" + inline(t) + "</li>").join("") + (ord ? "</ol>" : "</ul>"));
+      continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const p = [l]; i++;
+    while (i < L.length && L[i].trim() && !startsBlock(L[i], L[i + 1])) p.push(L[i++]);
+    out.push("<p>" + p.map(inline).join("<br>") + "</p>");
+  }
+  return out.join("");
+}
+//LOGIC-END
+
+// ---------- estado ----------
+let state = { ts: 0, notes: [] }, cur = null, mode = "read";
+let OBR = null, obrReady = false, touched = false;
+const dirty = new Set();
+let eng = null;
+import(ENG).then(m => { eng = m; }).catch(() => {});
+const uid = () => Math.random().toString(36).slice(2, 10);
+const bytes = s => new Blob([s]).size;
+const kb = n => (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+const LIMIT = 1024 * 1024;   // limite que você informou (1 MB); o teste da aba ⋯ confere o real
+
+function status(t, cls) { const s = $("status"); s.textContent = t; s.className = cls || ""; }
+function localLoad() { try { const v = JSON.parse(localStorage.getItem(LS)); if (v && Array.isArray(v.notes)) return v; } catch {} return null; }
+let lt = null;
+function localSave() { clearTimeout(lt); lt = setTimeout(() => { try { localStorage.setItem(LS, JSON.stringify(state)); } catch { status("Não consegui salvar neste aparelho (armazenamento cheio ou bloqueado).", "warn"); } }, 250); }
+function totalBytes() { return bytes(JSON.stringify(state.notes)); }
+
+// ---------- Owlbear: só as notas mudadas são enviadas ----------
+let ot = null;
+function obrSave() { clearTimeout(ot); ot = setTimeout(pushObr, 900); }
+async function pushObr() {
+  if (!obrReady) return;
+  if (totalBytes() > LIMIT) { status("Passou de 1 MB: salvando só neste aparelho.", "warn"); return; }
+  const upd = {};
+  for (const id of dirty) { const n = state.notes.find(x => x.id === id); upd[P + "n-" + id] = n ? { b: n.b, ts: n.ts } : null; }
+  upd[P + "idx"] = { ts: state.ts, items: state.notes.map(n => ({ id: n.id, t: n.t })) };
+  try { await OBR.player.setMetadata(upd); dirty.clear(); status("Salvo no Owlbear e neste aparelho", "ok"); }
+  catch (e) { status("O Owlbear recusou salvar (" + ((e && e.message) || "erro") + "). Ficou só neste aparelho.", "warn"); }
+}
+function changed(id) { state.ts = Date.now(); if (id) dirty.add(id); localSave(); obrSave(); status(obrReady ? "Salvando…" : "Salvo neste aparelho (sem conexão com o Owlbear)", obrReady ? "" : "warn"); }
+
+async function loadFromObr() {
+  const meta = await OBR.player.getMetadata();
+  const idx = meta[P + "idx"];
+  const local = localLoad();
+  let remote = null;
+  if (idx && Array.isArray(idx.items)) {
+    remote = { ts: idx.ts || 0, notes: idx.items.map(it => { const n = meta[P + "n-" + it.id] || {}; return { id: it.id, t: it.t, b: n.b || "", ts: n.ts || 0 }; }) };
+  }
+  if (remote && (!local || remote.ts >= local.ts)) { state = remote; try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} }
+  else if (local) { state = local; for (const n of state.notes) dirty.add(n.id); pushObr(); }
+  render();
+}
+
+// ---------- telas ----------
+function show(id) { for (const v of document.querySelectorAll(".view")) v.classList.toggle("on", v.id === id); $("tools").classList.toggle("on", id === "tools"); }
+function render() {
+  const lst = $("list"); lst.textContent = "";
+  if (!state.notes.length) { const d = document.createElement("div"); d.className = "empty"; d.textContent = "Nenhuma nota ainda. Toque em “+ Nova nota”."; lst.append(d); }
+  for (const n of state.notes) {
+    const b = document.createElement("button"); b.className = "it"; b.dataset.id = n.id;
+    const t = document.createElement("b"); t.textContent = n.t || "Sem título";
+    const s = document.createElement("span"); s.textContent = (n.b || "").replace(/\s+/g, " ").slice(0, 80) || "(vazia)";
+    b.append(t, s); lst.append(b);
+  }
+}
+function openNote(id, m) {
+  cur = id; const n = state.notes.find(x => x.id === id); if (!n) return;
+  $("title").value = n.t; $("ed").value = n.b; setMode(m || "read"); show("v-note"); sz();
+}
+function setMode(m) {
+  mode = m; const n = state.notes.find(x => x.id === cur);
+  $("mread").classList.toggle("on", m === "read"); $("medit").classList.toggle("on", m === "edit");
+  $("ed").hidden = m !== "edit"; $("rd").hidden = m !== "read";
+  if (m === "read" && n) $("rd").innerHTML = md(n.b) || '<p class="sub">(nota vazia)</p>';
+}
+function sz() { $("sz").textContent = kb(totalBytes()) + " de 1 MB"; }
+
+$("bnew").onclick = () => {
+  const n = { id: uid(), t: "Nova nota", b: "", ts: Date.now() }; state.notes.unshift(n); touched = true; changed(n.id); render(); openNote(n.id, "edit"); $("ed").focus();
+};
+$("list").onclick = e => { const b = e.target.closest(".it"); if (b) openNote(b.dataset.id, "read"); };
+$("bback").onclick = () => { cur = null; render(); show("v-list"); };
+$("mread").onclick = () => setMode("read");
+$("medit").onclick = () => { setMode("edit"); $("ed").focus(); };
+$("title").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; touched = true; n.t = e.target.value; n.ts = Date.now(); changed(n.id); };
+$("ed").oninput = e => { const n = state.notes.find(x => x.id === cur); if (!n) return; touched = true; n.b = e.target.value; n.ts = Date.now(); changed(n.id); sz(); };
+let delArm = null;
+$("bdel").onclick = () => {
+  const b = $("bdel");
+  if (!delArm) { b.textContent = "Apagar mesmo?"; delArm = setTimeout(() => { delArm = null; b.textContent = "Apagar"; }, 3500); return; }
+  clearTimeout(delArm); delArm = null; b.textContent = "Apagar";
+  state.notes = state.notes.filter(x => x.id !== cur); changed(cur); cur = null; render(); show("v-list");
+};
+
+// ---------- rolagem interna (nesta etapa só aparece aqui, na própria Scribe!) ----------
+const hist = [];
+$("rd").addEventListener("click", async e => {
+  const b = e.target.closest(".dice"); if (!b) return;
+  if (!eng) { try { eng = await import(ENG); } catch { status("Não consegui carregar o motor de dados.", "warn"); return; } }
+  let rolls; try { rolls = eng.rollInput(b.dataset.f); } catch (er) { status("Não entendi a rolagem: " + er.message, "warn"); return; }
+  for (const r of rolls) for (const x of r.results) hist.unshift({ f: r.formula, t: x.t, d: x.d });
+  hist.length = Math.min(hist.length, 6); drawRolls();
+});
+function drawRolls() {
+  const box = $("rolls"); box.textContent = ""; box.classList.toggle("on", hist.length > 0);
+  for (const h of hist) {
+    const r = document.createElement("div"); r.className = "r";
+    const t = document.createElement("b"); t.textContent = h.t;
+    const d = document.createElement("span");
+    const parts = (h.f + "  ⟵ " + h.d).split(/(~-?\d+~)/);
+    for (const p of parts) { if (/^~-?\d+~$/.test(p)) { const s = document.createElement("s"); s.textContent = p.slice(1, -1); d.append(s); } else d.append(p); }
+    r.append(t, d); box.append(r);
+  }
+}
+
+// ---------- exportar / importar / teste ----------
+function download(name, text, type) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+const fname = s => (s || "nota").replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 60) || "nota";
+$("bexp").onclick = () => { const n = state.notes.find(x => x.id === cur); if (n) download(fname(n.t) + ".md", n.b, "text/markdown"); };
+$("texpall").onclick = () => download("scribe-notas.json", JSON.stringify({ v: 1, notes: state.notes.map(n => ({ t: n.t, b: n.b })) }, null, 1), "application/json");
+$("timp").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const txt = await f.text(); const add = [];
+  try {
+    if (/\.json$/i.test(f.name)) { const j = JSON.parse(txt); for (const n of (j.notes || [])) add.push({ t: String(n.t || "Importada").slice(0, 80), b: String(n.b || "") }); }
+    else add.push({ t: fname(f.name.replace(/\.[^.]+$/, "")), b: txt });
+  } catch { $("tout").textContent = "Arquivo inválido."; return; }
+  for (const a of add) { const n = { id: uid(), t: a.t, b: a.b, ts: Date.now() }; state.notes.unshift(n); dirty.add(n.id); }
+  touched = true; changed(); render(); $("tout").textContent = add.length + " nota(s) importada(s).";
+};
+$("btools").onclick = () => show("tools");
+$("tback").onclick = () => { render(); show("v-list"); };
+$("ttest").onclick = () => { $("twarn").hidden = false; $("tconf").hidden = false; };
+$("tconf").onclick = async () => {
+  $("tconf").hidden = true; $("twarn").hidden = true;
+  if (!obrReady) { $("tout").textContent = "Sem conexão com o Owlbear."; return; }
+  let ok = 0, fail = 0, msg = "";
+  for (const s of [8e3, 16e3, 32e3, 64e3, 128e3, 256e3, 512e3, 1e6, 1.1e6]) {
+    $("tout").textContent = "Testando " + kb(s) + "…";
+    try { await OBR.player.setMetadata({ [P + "teste"]: "x".repeat(s) }); ok = s; } catch (e) { fail = s; msg = (e && e.message) || ""; break; }
+  }
+  try { await OBR.player.setMetadata({ [P + "teste"]: null }); } catch {}
+  $("tout").textContent = fail ? "O Owlbear aceitou até " + kb(ok) + " e recusou " + kb(fail) + (msg ? " (" + msg + ")" : "") + ". Me passe esse número."
+    : "O Owlbear aceitou até " + kb(ok) + " sem recusar. O limite de 1 MB parece certo.";
+};
+
+// ---------- modal / fechar ----------
+if (isModal) { $("bmodal").hidden = true; $("bclose").hidden = false; }
+$("bmodal").onclick = async () => {
+  clearTimeout(lt); try { localStorage.setItem(LS, JSON.stringify(state)); } catch {}
+  if (!OBR) return;
+  try { await pushObr(); await OBR.modal.open({ id: P + "modal", url: "/scribe/index.html?m=1", width: 900, height: 700 }); await OBR.action.close(); } catch {}
+};
+$("bclose").onclick = async () => { clearTimeout(lt); try { localStorage.setItem(LS, JSON.stringify(state)); } catch {} if (OBR) { try { await pushObr(); await OBR.modal.close(P + "modal"); } catch {} } };
+
+// ---------- começa já com o que está salvo no aparelho; conecta ao Owlbear em seguida ----------
+{ const l = localLoad(); if (l) state = l; render(); status("Conectando ao Owlbear…"); }
+const tries = (() => { try { return +sessionStorage.getItem("sc-tries") || 0; } catch { return 0; } })();
+const dog = setTimeout(() => {
+  if (obrReady) return;
+  if (tries < 2 && !touched) { try { sessionStorage.setItem("sc-tries", tries + 1); } catch {} location.reload(); return; }
+  status("Sem conexão com o Owlbear. Suas notas estão sendo salvas só neste aparelho.", "warn");
+}, 12000);
+for (const u of ["https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm", "https://esm.sh/@owlbear-rodeo/sdk@3"]) {
+  try { OBR = (await import(u)).default; break; } catch (e) {}
+}
+if (OBR) OBR.onReady(async () => {
+  try {
+    obrReady = true; clearTimeout(dog);
+    await loadFromObr();
+    try { sessionStorage.removeItem("sc-tries"); } catch {}
+    status("Salvo no Owlbear e neste aparelho", "ok");
+  } catch (e) { obrReady = false; status("Erro ao ler do Owlbear: " + ((e && e.message) || e), "warn"); }
+});
+</script></body></html>
