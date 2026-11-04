@@ -41,12 +41,20 @@ input[type=checkbox]{accent-color:var(--gold)}
 <div id="list"></div>
 <div id="warn"></div>
 <script type="module">
-let OBR;
-try { OBR = (await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm")).default; }
-catch (e) { document.getElementById("list").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message; throw e; }
+let OBR, buildShape, buildPath;
+try {
+  const sdk = await import("https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3/+esm");
+  OBR = sdk.default;
+  buildShape = sdk.buildShape;
+  buildPath = sdk.buildPath;
+} catch (e) {
+  document.getElementById("list").textContent = "Erro ao carregar o SDK do Owlbear: " + e.message;
+  throw e;
+}
 
 const SKEY = "com.gaduart.warpath/state";   // estado compartilhado (metadata da sala)
 const IKEY = "com.gaduart.warpath/init";    // iniciativa enviada pela ficha (metadata do jogador)
+const LAMP_KEY = "com.gaduart.warpath/lamp"; // identificador da lâmpada no mapa
 const ENGINE = "https://gaduarte14.github.io/dados/engine.js"; // mesmo motor de dados do Rollhaven
 const MAX = 120;
 
@@ -56,8 +64,9 @@ const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim(
 const clip = (s, n) => String(s ?? "").slice(0, n);
 const defaults = () => ({ active: false, started: false, round: 1, turnId: null, since: 0, entries: [] });
 const tokenName = i => clip((i.name || i.text?.plainText || "").trim() || "Sem nome", 40);
+const turnKey = s => (s && s.active && s.started && s.turnId) ? `${s.since || 0}:${s.round || 1}:${s.turnId}` : null;
 
-let state = defaults(), players = [], selfMeta = {}, compact = false, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null;
+let state = defaults(), players = [], selfMeta = {}, compact = false, isGM = false, incHidden = false, msg = "", ft, pending = false, unsub = null, lastTurnKey = null;
 let eng = null; import(ENGINE).then(m => eng = m).catch(() => {});
 
 function flash(t) { msg = t; render(); clearTimeout(ft); ft = setTimeout(() => { msg = ""; render(); }, 5000); }
@@ -74,8 +83,6 @@ function sortedEntries() {
 }
 const rotation = () => sortedEntries().filter(e => e.init !== null && !e.gone);
 
-// Todas as iniciativas enviadas pelas fichas: dos outros jogadores + a do próprio mestre
-// (o Owlbear não inclui você mesmo na lista de jogadores).
 function rollsPool() {
   const out = [];
   for (const p of players) { const r = p.metadata?.[IKEY]; if (r) out.push(r); }
@@ -83,7 +90,6 @@ function rollsPool() {
   return out;
 }
 
-// Aplica as iniciativas rolladas na ficha (casando pelo nome do personagem = nome do token).
 function applyRolls() {
   let changed = false;
   for (const r of rollsPool()) {
@@ -105,37 +111,206 @@ function orphans() {
   return out;
 }
 
+// Cria, move ou remove a lâmpada em cima do token de quem é a vez
+let lampChain = Promise.resolve();
+function updateLamp(targetId, force = false) {
+  lampChain = lampChain.then(() => _updateLamp(targetId, force)).catch(() => {});
+  return lampChain;
+}
+async function _updateLamp(targetId, force = false) {
+  if (!isGM || !buildShape || !(await OBR.scene.isReady())) return;
+  const old = await OBR.scene.items.getItems(i => Boolean(i.metadata?.[LAMP_KEY]));
+  if (!state.active || !state.started || !targetId) {
+    if (old.length) await OBR.scene.items.deleteItems(old.map(i => i.id));
+    return;
+  }
+  const [token] = await OBR.scene.items.getItems([targetId]);
+  if (!token) {
+    if (old.length) await OBR.scene.items.deleteItems(old.map(i => i.id));
+    return;
+  }
+  const vis = token.visible !== false;
+  if (!force && old.length === 5 && old.every(i => i.attachedTo === targetId && i.visible === vis)) return;
+  if (old.length) await OBR.scene.items.deleteItems(old.map(i => i.id));
+
+  let b;
+  try { b = await OBR.scene.items.getItemBounds([targetId]); }
+  catch (e) { b = { min: token.position, max: token.position, width: 0, height: 0, center: token.position }; }
+
+  const dpi = (await OBR.scene.grid.getDpi().catch(() => 150)) || 150;
+  const tw = Math.max(b.width || dpi, dpi * 0.75);
+  const th = Math.max(b.height || dpi, dpi * 0.75);
+  const cx = b.center.x, cy = b.center.y;
+  const topY = b.min?.y ?? (cy - th / 2);
+  const u = Math.max(dpi * 0.38, Math.min(tw, th) * 0.36);
+  const lampX = cx;
+  const lampY = topY - u * 0.75;
+
+  // 1) Halo no chão/ao redor do token da vez
+  const aura = buildShape()
+    .shapeType("CIRCLE")
+    .position({ x: cx, y: cy })
+    .width(tw * 1.15)
+    .height(th * 1.15)
+    .fillColor("#ffd43b")
+    .fillOpacity(0.12)
+    .strokeColor("#f59f00")
+    .strokeOpacity(0.9)
+    .strokeWidth(Math.max(3, Math.round(dpi * 0.025)))
+    .layer("ATTACHMENT");
+
+  // 2) Brilho externo da lâmpada
+  const glow = buildShape()
+    .shapeType("CIRCLE")
+    .position({ x: lampX, y: lampY })
+    .width(u * 1.35)
+    .height(u * 1.35)
+    .fillColor("#ffe066")
+    .fillOpacity(0.36)
+    .strokeColor("#ffd43b")
+    .strokeOpacity(0.65)
+    .strokeWidth(2)
+    .layer("POPOVER");
+
+  // 3) Bulbo da lâmpada
+  const bulb = buildShape()
+    .shapeType("CIRCLE")
+    .position({ x: lampX, y: lampY })
+    .width(u * 0.68)
+    .height(u * 0.68)
+    .fillColor("#fff3bf")
+    .fillOpacity(1)
+    .strokeColor("#f59f00")
+    .strokeOpacity(1)
+    .strokeWidth(Math.max(2, Math.round(u * 0.06)))
+    .layer("POPOVER");
+
+  // 4) Soquete/base metálica da lâmpada
+  const baseW = u * 0.32, baseH = u * 0.22;
+  const base = buildShape()
+    .shapeType("RECTANGLE")
+    .position({ x: lampX - baseW / 2, y: lampY + u * 0.28 })
+    .width(baseW)
+    .height(baseH)
+    .fillColor("#ced4da")
+    .fillOpacity(1)
+    .strokeColor("#495057")
+    .strokeOpacity(1)
+    .strokeWidth(2)
+    .layer("POPOVER");
+
+  const builders = [aura, glow, bulb, base];
+
+  // 5) Raios de luz e filamento da lâmpada
+  if (buildPath) {
+    const rays = buildPath()
+      .position({ x: lampX, y: lampY })
+      .fillColor("#000000")
+      .fillOpacity(0)
+      .strokeColor("#fcc419")
+      .strokeOpacity(1)
+      .strokeWidth(Math.max(2, Math.round(u * 0.055)))
+      .commands([
+        [0, 0, -u * 0.44], [1, 0, -u * 0.64],
+        [0, -u * 0.32, -u * 0.32], [1, -u * 0.48, -u * 0.48],
+        [0, u * 0.32, -u * 0.32], [1, u * 0.48, -u * 0.48],
+        [0, -u * 0.44, 0], [1, -u * 0.62, 0],
+        [0, u * 0.44, 0], [1, u * 0.62, 0],
+        [0, -u * 0.1, u * 0.22], [1, -u * 0.06, -u * 0.04], [1, 0, u * 0.04], [1, u * 0.06, -u * 0.04], [1, u * 0.1, u * 0.22]
+      ])
+      .layer("POPOVER");
+    builders.push(rays);
+  }
+
+  const items = builders.map(bld => {
+    bld.attachedTo(targetId)
+       .locked(true)
+       .disableHit(true)
+       .visible(vis)
+       .name("Lâmpada da Vez")
+       .metadata({ [LAMP_KEY]: targetId });
+    if (typeof bld.disableAttachmentBehavior === "function") {
+      bld.disableAttachmentBehavior(["ROTATION"]);
+    }
+    return bld.build();
+  });
+
+  await OBR.scene.items.addItems(items);
+}
+
 async function focus(id) {
-  // 1) câmera: tenta os limites do token; se falhar, usa a posição dele
+  if (!id || !(await OBR.scene.isReady())) return;
   try {
-    let b;
-    try { b = await OBR.scene.items.getItemBounds([id]); }
-    catch (e) {
+    let c, b;
+    try {
+      b = await OBR.scene.items.getItemBounds([id]);
+      c = b?.center;
+    } catch (e) {}
+    if (!c || !Number.isFinite(c.x) || !Number.isFinite(c.y)) {
       const [it] = await OBR.scene.items.getItems([id]);
       if (!it) throw new Error("token não está mais no mapa");
-      b = { min: it.position, max: it.position, width: 0, height: 0, center: it.position };
+      c = it.position;
+      b = { min: c, max: c, width: 0, height: 0, center: c };
     }
-    const dpi = (await OBR.scene.grid.getDpi()) || 150, c = b.center, r = Math.max(dpi * 3, b.width, b.height);
-    await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
+    // Seleciona primeiro para não interromper a animação da câmera
+    if (isGM) {
+      try { await OBR.player.select([id]); } catch (e) {}
+    }
+    try {
+      const [width, height, curScale, dpi] = await Promise.all([
+        OBR.viewport.getWidth(),
+        OBR.viewport.getHeight(),
+        OBR.viewport.getScale(),
+        OBR.scene.grid.getDpi().catch(() => 150)
+      ]);
+      const gridDpi = dpi || 150;
+      const minScale = Math.min(width, height) / (gridDpi * 14);
+      const maxScale = Math.min(width, height) / (gridDpi * 4);
+      const scale = Math.max(minScale, Math.min(maxScale, curScale || 1));
+      await OBR.viewport.animateTo({
+        position: { x: -c.x * scale + width / 2, y: -c.y * scale + height / 2 },
+        scale
+      });
+    } catch (e) {
+      const dpi = (await OBR.scene.grid.getDpi().catch(() => 150)) || 150;
+      const r = Math.max(dpi * 3, b?.width || 0, b?.height || 0);
+      await OBR.viewport.animateToBounds({ min: { x: c.x - r, y: c.y - r }, max: { x: c.x + r, y: c.y + r }, width: 2 * r, height: 2 * r, center: c });
+    }
     if (isGM) flash("Foco: " + (state.entries.find(e => e.id === id)?.name ?? "token"));
-  } catch (e) { if (isGM) flash("Não consegui focar a câmera: " + (e?.message || e)); }
-  // 2) seleção: independente da câmera, para o token da vez sempre ficar selecionado
-  try { if (isGM) await OBR.player.select([id]); } catch (e) {}
+  } catch (e) {
+    if (isGM) flash("Não consegui focar a câmera: " + (e?.message || e));
+  }
+}
+
+// Dispara o movimento de câmera quando o turno muda (para Mestre e Jogadores)
+function checkTurnFocus(s) {
+  const key = turnKey(s);
+  if (!key) { lastTurnKey = null; return; }
+  if (key === lastTurnKey) return;
+  lastTurnKey = key;
+  try {
+    if (sessionStorage.getItem("wp-last-turn") === key) return;
+    sessionStorage.setItem("wp-last-turn", key);
+  } catch (e) {}
+  focus(s.turnId);
 }
 
 async function start() {
   let items;
-  try { items = await OBR.scene.items.getItems(i => (i.layer === "CHARACTER" || i.layer === "MOUNT") && i.type === "IMAGE" && (incHidden || i.visible)); }
+  try { items = await OBR.scene.items.getItems(i => (i.layer === "CHARACTER" || i.layer === "MOUNT") && i.type === "IMAGE" && !i.metadata?.[LAMP_KEY] && (incHidden || i.visible)); }
   catch (e) { flash("Abra uma cena primeiro."); return; }
   if (!items.length) { flash("Nenhum token nas camadas Personagem/Montaria."); return; }
   const entries = items.slice(0, MAX).map(i => ({ id: i.id, name: tokenName(i), init: null, rt: 0 }));
   state = { ...defaults(), active: true, since: state.since, entries };
   applyRolls();
+  await updateLamp(null);
   await save(); render();
   if (items.length > MAX) flash(`Só os primeiros ${MAX} tokens entraram.`);
 }
 async function end() {
   state = { ...defaults(), since: Date.now() };
+  lastTurnKey = null;
+  await updateLamp(null);
   await save(); render();
 }
 async function step(dir) {
@@ -150,12 +325,18 @@ async function step(dir) {
     else if (idx < 0) { if (state.round > 1) { state.round--; idx = order.length - 1; } else idx = 0; }
   }
   state.turnId = order[idx].id;
-  await save(); render(); focus(state.turnId);
+  const key = turnKey(state);
+  lastTurnKey = key;
+  try { if (key) sessionStorage.setItem("wp-last-turn", key); } catch (e) {}
+  await save();
+  render();
+  await updateLamp(state.turnId);
+  await focus(state.turnId);
 }
 async function addSelected() {
   const sel = (await OBR.player.getSelection()) || [];
   if (!sel.length) { flash("Selecione tokens no mapa primeiro."); return; }
-  const items = (await OBR.scene.items.getItems(sel)).filter(i => i.type === "IMAGE" && !state.entries.some(e => e.id === i.id));
+  const items = (await OBR.scene.items.getItems(sel)).filter(i => i.type === "IMAGE" && !i.metadata?.[LAMP_KEY] && !state.entries.some(e => e.id === i.id));
   if (!items.length) { flash("Esses tokens já estão na lista."); return; }
   for (const i of items) if (state.entries.length < MAX) state.entries.push({ id: i.id, name: tokenName(i), init: null, rt: 0 });
   applyRolls(); await save(); render();
@@ -173,6 +354,7 @@ async function removeEntry(id) {
     state.turnId = i > 0 ? order[i - 1].id : null;
   }
   state.entries = state.entries.filter(e => e.id !== id);
+  await updateLamp(state.turnId);
   await save(); render();
 }
 async function setInit(id, raw) {
@@ -185,7 +367,6 @@ async function setInit(id, raw) {
 
 function render() {
   const a = document.activeElement;
-  // só adia a atualização se o mestre estiver no meio da digitação de um valor
   if (a && a.tagName === "INPUT" && a.closest("#list") && a.value !== a.defaultValue) { pending = true; return; }
   pending = false;
   $("bar").hidden = !isGM;
@@ -193,11 +374,10 @@ function render() {
     ? `<button class="on" data-a="start">Iniciar</button><label class="chk"><input type="checkbox" id="hid" ${incHidden ? "checked" : ""}> incluir tokens ocultos</label>`
     : `<button class="on" data-a="next">${state.started ? "Próximo ▶" : "Começar ▶"}</button><button data-a="prev" title="Voltar um turno">◀</button><button data-a="roll" title="Rola 1d20 para quem está sem valor">🎲 Vazios</button><button data-a="add">+ Selecionados</button><button data-a="end">Encerrar</button>`;
   $("rnd").textContent = state.active ? (state.started ? `Rodada ${state.round}` : "Preparação") : "";
-  // Modo compacto: some a lista e fica só o personagem da vez + controles
   $("list").hidden = compact; $("now").hidden = !compact;
   if (compact) {
     const cur = state.entries.find(e => e.id === state.turnId);
-    $("now").textContent = !state.active ? "Sem combate" : cur ? `▶ ${cur.name}${cur.init !== null ? " (" + cur.init + ")" : ""}` : "Preparação";
+    $("now").textContent = !state.active ? "Sem combate" : cur ? `💡 ${cur.name}${cur.init !== null ? " (" + cur.init + ")" : ""}` : "Preparação";
   }
   const list = $("list");
   if (!state.active) {
@@ -208,7 +388,7 @@ function render() {
       const num = isGM
         ? `<input class="ini" type="text" inputmode="decimal" data-id="${esc(e.id)}" value="${e.init ?? ""}" placeholder="—" aria-label="Iniciativa de ${esc(e.name)}">`
         : `<b class="ini">${e.init ?? "—"}</b>`;
-      return `<div class="row${cur ? " cur" : ""}${e.gone ? " gone" : ""}${e.init === null ? " none" : ""}" data-id="${esc(e.id)}"><span class="arrow">${cur ? "▶" : ""}</span>${num}<span class="nm">${esc(e.name)}</span>${isGM ? `<button class="x" data-rm="${esc(e.id)}" aria-label="Remover ${esc(e.name)}">✕</button>` : ""}</div>`;
+      return `<div class="row${cur ? " cur" : ""}${e.gone ? " gone" : ""}${e.init === null ? " none" : ""}" data-id="${esc(e.id)}"><span class="arrow">${cur ? "💡" : ""}</span>${num}<span class="nm">${esc(e.name)}</span>${isGM ? `<button class="x" data-rm="${esc(e.id)}" aria-label="Remover ${esc(e.name)}">✕</button>` : ""}</div>`;
     }).join("");
     list.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
   }
@@ -237,7 +417,7 @@ $("compact").addEventListener("click", async () => {
   try { await OBR.action.setHeight(compact ? 230 : 560); } catch (e) { flash("Não consegui redimensionar: " + (e?.message || e)); }
   render();
 });
-$("reload").addEventListener("click", () => location.reload()); // o estado fica salvo na sala, então nada se perde
+$("reload").addEventListener("click", () => location.reload());
 $("list").addEventListener("change", e => { if (e.target.matches("input.ini")) setInit(e.target.dataset.id, e.target.value); });
 $("list").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("input.ini")) e.target.blur(); });
 $("list").addEventListener("focusout", () => setTimeout(() => { if (pending) render(); }, 0));
@@ -248,7 +428,7 @@ $("list").addEventListener("click", e => {
   const row = e.target.closest(".row"); if (row) focus(row.dataset.id);
 });
 
-// Mantém nomes dos tokens atualizados e marca os que saíram do mapa.
+// Mantém nomes dos tokens atualizados, marca os que saíram do mapa e sincroniza a lâmpada
 function syncItems(items) {
   if (!isGM || !state.active) return;
   const byId = new Map(items.map(i => [i.id, i]));
@@ -260,14 +440,18 @@ function syncItems(items) {
     const nm = tokenName(it);
     if (nm !== e.name) { e.name = nm; ch = true; }
   }
+  if (state.started && state.turnId) updateLamp(state.turnId);
   if (ch) { applyRolls(); save(); render(); }
 }
 async function watchItems() {
-  const go = () => { unsub?.(); unsub = OBR.scene.items.onChange(syncItems); };
+  const go = () => {
+    unsub?.();
+    unsub = OBR.scene.items.onChange(syncItems);
+    if (isGM) updateLamp(state.turnId);
+  };
   if (await OBR.scene.isReady()) go(); else OBR.scene.onReadyChange(r => { if (r) go(); });
 }
 
-// Garantia: confere os dados a cada 2s, caso o aviso ao vivo do Owlbear não chegue.
 let poolSig = "", lastRemote = "";
 async function poll() {
   try {
@@ -280,12 +464,16 @@ async function poll() {
       if (changed || sig !== poolSig) { poolSig = sig; render(); }
     } else {
       const s = (await OBR.room.getMetadata())[SKEY], j = JSON.stringify(s ?? null);
-      if (s && j !== lastRemote) { lastRemote = j; state = { ...defaults(), ...s }; render(); }
+      if (s && j !== lastRemote) {
+        lastRemote = j;
+        state = { ...defaults(), ...s };
+        render();
+        checkTurnFocus(state);
+      }
     }
   } catch (e) {}
 }
 
-// Qualquer erro inesperado aparece na tela em vez de ficar escondido.
 addEventListener("unhandledrejection", e => flash("Erro: " + (e.reason?.message || e.reason)));
 
 OBR.onReady(async () => {
@@ -294,9 +482,13 @@ OBR.onReady(async () => {
   try { players = await OBR.party.getPlayers(); } catch (e) {}
   try {
     const meta = await OBR.room.getMetadata();
-    if (meta[SKEY]) { lastRemote = JSON.stringify(meta[SKEY]); state = { ...defaults(), ...meta[SKEY] }; }
+    if (meta[SKEY]) {
+      lastRemote = JSON.stringify(meta[SKEY]);
+      state = { ...defaults(), ...meta[SKEY] };
+      lastTurnKey = turnKey(state);
+      if (lastTurnKey) { try { sessionStorage.setItem("wp-last-turn", lastTurnKey); } catch (e) {} }
+    }
   } catch (e) {}
-  // Cada assinatura é independente: se uma falhar, as outras continuam funcionando.
   try {
     OBR.player.onChange(async p => {
       isGM = p.role === "GM"; selfMeta = p.metadata || {};
@@ -304,15 +496,23 @@ OBR.onReady(async () => {
       render();
     });
   } catch (e) {}
-  // O mestre é a fonte da verdade; jogadores só acompanham.
   try {
     OBR.room.onMetadataChange(m => {
-      if (!isGM && m[SKEY]) { lastRemote = JSON.stringify(m[SKEY]); state = { ...defaults(), ...m[SKEY] }; render(); }
+      if (m[SKEY]) {
+        const j = JSON.stringify(m[SKEY]);
+        if (!isGM && j !== lastRemote) {
+          lastRemote = j;
+          state = { ...defaults(), ...m[SKEY] };
+          render();
+        }
+        checkTurnFocus(m[SKEY]);
+      }
     });
   } catch (e) {}
   try { OBR.party.onChange(async p => { players = p; if (isGM && state.active && applyRolls()) await save(); render(); }); } catch (e) {}
-  setInterval(poll, 2000); // garantia caso algum aviso ao vivo não chegue
+  setInterval(poll, 2000);
   try { if (isGM && state.active && applyRolls()) await save(); } catch (e) {}
+  if (isGM) updateLamp(state.turnId);
   render();
   watchItems().catch(() => {});
 });
