@@ -6,16 +6,285 @@
 </head>
 <body>
   <script type="module">
-    import OBR from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+    import OBR, { buildCurve } from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+    import {
+      organizarTracosParede,
+      projetarPontoNoSegmento,
+      alinharValorAoGrid,
+      segmentosSeCruzam
+    } from "./geometria.js";
 
     const ID_EXTENSAO = "com.gaduarte14.nevoa3em1";
+    const CHAVE_PAREDES = `${ID_EXTENSAO}/paredes`;
+    const CHAVE_CONFIG = `${ID_EXTENSAO}/config`;
+    const CANAL_COMUNICACAO = new BroadcastChannel("nevoa3em1_canal");
+
+    const ID_TRACO_ATIVO = `${ID_EXTENSAO}_traco_ativo`;
+    const PREFIXO_BRUTO = `${ID_EXTENSAO}_bruto_`;
+    const PREFIXO_PREVIA = `${ID_EXTENSAO}_previa_`;
+    const PREFIXO_PAREDE_GM = `${ID_EXTENSAO}_parede_gm_`;
+
+    // Configuração padrão da Fase 1
+    let configCena = {
+      toleranciaRDP: 10,
+      toleranciaAnguloGraus: 8,
+      aceitarDiagonais45: true,
+      alinharAoGrid: false,
+      passoGridMeiaCelula: true,
+      raioSnap: 22,
+      comprimentoMinimoSegmento: 16,
+      modoLinhaReta: false,
+      mostrarParedesMestre: true,
+      bloquearMovimentoTokens: true
+    };
+
+    // Estado dos traços antes de clicar em Concluir
+    let tracosPendentes = [];
+    let tracoSendoRiscado = null;
+    let pontoInicialReta = null;
+    let idsLocaisPrevia = [];
+    let idsLocaisParedesMestre = [];
+    let rafAgendado = false;
+
+    // Pilha própria de Desfazer / Refazer (cada Concluir é 1 passo)
+    const pilhaDesfazer = [];
+    const pilhaRefazer = [];
+    const ultimasPosicoesTokens = new Map();
+
+    async function obterParedesCena() {
+      const meta = await OBR.scene.getMetadata();
+      const dados = meta[CHAVE_PAREDES];
+      return dados && Array.isArray(dados.segmentos) ? dados.segmentos : [];
+    }
+
+    async function salvarParedesCena(segmentos, gravarHistorico = true) {
+      if (gravarHistorico) {
+        const atuais = await obterParedesCena();
+        pilhaDesfazer.push(atuais);
+        if (pilhaDesfazer.length > 30) pilhaDesfazer.shift();
+        pilhaRefazer.length = 0;
+      }
+      await OBR.scene.setMetadata({
+        [CHAVE_PAREDES]: {
+          atualizadoEm: Date.now(),
+          segmentos
+        }
+      });
+      await renderizarParedesMestre(segmentos);
+      notificarPainel();
+    }
+
+    // Desenha as paredes salvas em laranja (e portas em azul tracejado) para o Mestre
+    async function renderizarParedesMestre(paredes) {
+      if (idsLocaisParedesMestre.length > 0) {
+        await OBR.scene.local.deleteItems(idsLocaisParedesMestre);
+        idsLocaisParedesMestre = [];
+      }
+      const role = await OBR.player.getRole();
+      if (role !== "GM" || !configCena.mostrarParedesMestre || !paredes.length) return;
+
+      const itens = paredes.map((p) => {
+        const idLocal = `${PREFIXO_PAREDE_GM}${p.id}`;
+        idsLocaisParedesMestre.push(idLocal);
+        return buildCurve()
+          .id(idLocal)
+          .name("Parede (Mestre)")
+          .points([
+            { x: p.x1, y: p.y1 },
+            { x: p.x2, y: p.y2 }
+          ])
+          .tension(0)
+          .strokeColor(p.porta ? "#38bdf8" : "#f97316")
+          .strokeWidth(6)
+          .strokeOpacity(p.aberta ? 0.35 : 0.9)
+          .strokeDash(p.porta ? [10, 6] : [])
+          .fillOpacity(0)
+          .layer("DRAWING")
+          .locked(true)
+          .disableHit(true)
+          .build();
+      });
+
+      await OBR.scene.local.addItems(itens);
+    }
+
+    // Atualiza o traço bruto tracejado (azul) + prévia organizada em tempo real (verde)
+    async function atualizarPreviaTempoReal() {
+      if (idsLocaisPrevia.length > 0) {
+        await OBR.scene.local.deleteItems(idsLocaisPrevia);
+        idsLocaisPrevia = [];
+      }
+      if (tracosPendentes.length === 0) {
+        notificarPainel();
+        return;
+      }
+
+      const dpi = await OBR.scene.grid.getDpi();
+      const paredesExistentes = await obterParedesCena();
+      const { novosSegmentos } = organizarTracosParede(
+        tracosPendentes,
+        paredesExistentes,
+        configCena,
+        dpi
+      );
+
+      const itens = [];
+
+      // 1. Traço bruto tracejado (azul ciano)
+      tracosPendentes.forEach((traco, idx) => {
+        if (traco.pontos.length < 2) return;
+        const idBruto = `${PREFIXO_BRUTO}${idx}`;
+        idsLocaisPrevia.push(idBruto);
+        itens.push(
+          buildCurve()
+            .id(idBruto)
+            .points(traco.pontos)
+            .tension(0)
+            .strokeColor("#00e5ff")
+            .strokeWidth(4)
+            .strokeDash([12, 10])
+            .strokeOpacity(0.75)
+            .fillOpacity(0)
+            .layer("DRAWING")
+            .locked(true)
+            .disableHit(true)
+            .build()
+        );
+      });
+
+      // 2. Prévia organizada sobreposta (verde limão)
+      novosSegmentos.forEach((seg, idx) => {
+        const idPrev = `${PREFIXO_PREVIA}${idx}`;
+        idsLocaisPrevia.push(idPrev);
+        itens.push(
+          buildCurve()
+            .id(idPrev)
+            .points([
+              { x: seg.x1, y: seg.y1 },
+              { x: seg.x2, y: seg.y2 }
+            ])
+            .tension(0)
+            .strokeColor("#a3e635")
+            .strokeWidth(7)
+            .strokeOpacity(0.95)
+            .fillOpacity(0)
+            .layer("DRAWING")
+            .locked(true)
+            .disableHit(true)
+            .build()
+        );
+      });
+
+      if (itens.length > 0) {
+        await OBR.scene.local.addItems(itens);
+      }
+      notificarPainel();
+    }
+
+    async function concluirTracos() {
+      if (tracosPendentes.length === 0) return;
+      const dpi = await OBR.scene.grid.getDpi();
+      const paredesExistentes = await obterParedesCena();
+      const { novosSegmentos, todasParedes } = organizarTracosParede(
+        tracosPendentes,
+        paredesExistentes,
+        configCena,
+        dpi
+      );
+      tracosPendentes = [];
+      pontoInicialReta = null;
+      await atualizarPreviaTempoReal();
+      await salvarParedesCena(todasParedes, true);
+      await OBR.notification.show(`${novosSegmentos.length} parede(s) concluída(s)!`, "SUCCESS");
+    }
+
+    async function desfazerUltimoTraco() {
+      if (tracosPendentes.length === 0) return;
+      tracosPendentes.pop();
+      pontoInicialReta = null;
+      await atualizarPreviaTempoReal();
+    }
+
+    async function cancelarTracos() {
+      tracosPendentes = [];
+      pontoInicialReta = null;
+      await OBR.scene.local.deleteItems([ID_TRACO_ATIVO]);
+      await atualizarPreviaTempoReal();
+    }
+
+    async function apagarParedeNoPonto(ponto, raio = 26) {
+      const paredes = await obterParedesCena();
+      let idxMaisProximo = -1;
+      let menorDist = raio;
+      for (let i = 0; i < paredes.length; i++) {
+        const p = paredes[i];
+        const proj = projetarPontoNoSegmento(ponto, { x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 });
+        if (proj.dist <= menorDist) {
+          menorDist = proj.dist;
+          idxMaisProximo = i;
+        }
+      }
+      if (idxMaisProximo !== -1) {
+        const novas = paredes.filter((_, idx) => idx !== idxMaisProximo);
+        await salvarParedesCena(novas, true);
+      }
+    }
+
+    async function notificarPainel() {
+      const paredes = await obterParedesCena();
+      CANAL_COMUNICACAO.postMessage({
+        tipo: "ESTADO_ATUALIZADO",
+        configCena,
+        qtdTracosPendentes: tracosPendentes.length,
+        qtdParedesSalvas: paredes.length,
+        podeDesfazer: pilhaDesfazer.length > 0,
+        podeRefazer: pilhaRefazer.length > 0
+      });
+    }
+
+    // Recebe comandos em tempo real do painel (index.html)
+    CANAL_COMUNICACAO.onmessage = async (ev) => {
+      const msg = ev.data;
+      if (!msg || !msg.acao) return;
+
+      if (msg.acao === "PEDIR_ESTADO") {
+        await notificarPainel();
+      } else if (msg.acao === "ATUALIZAR_CONFIG") {
+        configCena = { ...configCena, ...msg.novosValores };
+        await OBR.scene.setMetadata({ [CHAVE_CONFIG]: configCena });
+        await atualizarPreviaTempoReal();
+        const paredes = await obterParedesCena();
+        await renderizarParedesMestre(paredes);
+      } else if (msg.acao === "CONCLUIR_TRACOS") {
+        await concluirTracos();
+      } else if (msg.acao === "DESFAZER_TRACO") {
+        await desfazerUltimoTraco();
+      } else if (msg.acao === "CANCELAR_TRACOS") {
+        await cancelarTracos();
+      } else if (msg.acao === "DESFAZER_PAREDE") {
+        if (pilhaDesfazer.length > 0) {
+          const atual = await obterParedesCena();
+          const ant = pilhaDesfazer.pop();
+          pilhaRefazer.push(atual);
+          await salvarParedesCena(ant, false);
+        }
+      } else if (msg.acao === "REFAZER_PAREDE") {
+        if (pilhaRefazer.length > 0) {
+          const atual = await obterParedesCena();
+          const prox = pilhaRefazer.pop();
+          pilhaDesfazer.push(atual);
+          await salvarParedesCena(prox, false);
+        }
+      } else if (msg.acao === "LIMPAR_TODAS_PAREDES") {
+        await salvarParedesCena([], true);
+      }
+    };
 
     OBR.onReady(async () => {
-      console.log("[Névoa 3em1] Background iniciado com sucesso!");
+      const idFerramenta = `${ID_EXTENSAO}/ferramenta-principal`;
 
-      // Cria o botão da ferramenta principal na barra lateral (para o Mestre)
       await OBR.tool.create({
-        id: `${ID_EXTENSAO}/ferramenta-principal`,
+        id: idFerramenta,
         icons: [
           {
             icon: "https://gaduarte14.github.io/nevoa/icon.svg",
@@ -23,6 +292,198 @@
             filter: { roles: ["GM"] }
           }
         ]
+      });
+
+      // MODO 1: Lápis de Parede (e Linha Reta com Shift ou interruptor)
+      await OBR.tool.createMode({
+        id: `${ID_EXTENSAO}/modo-lapis`,
+        icons: [
+          {
+            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
+            label: "Desenhar Parede (Lápis / Reta)",
+            filter: { activeTools: [idFerramenta], roles: ["GM"] }
+          }
+        ],
+        cursors: [{ cursor: "crosshair" }],
+        async onToolClick(_, event) {
+          const usarReta = Boolean(event.shiftKey || configCena.modoLinhaReta);
+          if (!usarReta) return;
+
+          const dpi = await OBR.scene.grid.getDpi();
+          let pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
+          if (configCena.alinharAoGrid) {
+            pt.x = alinharValorAoGrid(pt.x, dpi, configCena.passoGridMeiaCelula);
+            pt.y = alinharValorAoGrid(pt.y, dpi, configCena.passoGridMeiaCelula);
+          }
+
+          if (!pontoInicialReta) {
+            pontoInicialReta = pt;
+            await OBR.notification.show("Ponto 1 marcado! Clique no ponto 2 para criar a reta.", "INFO");
+          } else {
+            tracosPendentes.push({
+              pontos: [pontoInicialReta, pt],
+              linhaReta: true
+            });
+            pontoInicialReta = null;
+            await atualizarPreviaTempoReal();
+          }
+        },
+        async onToolDragStart(_, event) {
+          const usarReta = Boolean(event.shiftKey || configCena.modoLinhaReta);
+          tracoSendoRiscado = {
+            pontos: [{ x: event.pointerPosition.x, y: event.pointerPosition.y }],
+            linhaReta: usarReta
+          };
+
+          const itemProv = buildCurve()
+            .id(ID_TRACO_ATIVO)
+            .points(tracoSendoRiscado.pontos)
+            .tension(0)
+            .strokeColor("#00e5ff")
+            .strokeWidth(5)
+            .strokeDash([12, 8])
+            .fillOpacity(0)
+            .layer("DRAWING")
+            .locked(true)
+            .disableHit(true)
+            .build();
+
+          await OBR.scene.local.addItems([itemProv]);
+        },
+        onToolDragMove(_, event) {
+          if (!tracoSendoRiscado) return;
+          const pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
+
+          if (tracoSendoRiscado.linhaReta) {
+            tracoSendoRiscado.pontos = [tracoSendoRiscado.pontos[0], pt];
+          } else {
+            const ult = tracoSendoRiscado.pontos[tracoSendoRiscado.pontos.length - 1];
+            if (Math.hypot(pt.x - ult.x, pt.y - ult.y) >= 3) {
+              tracoSendoRiscado.pontos.push(pt);
+            }
+          }
+
+          if (!rafAgendado) {
+            rafAgendado = true;
+            requestAnimationFrame(async () => {
+              rafAgendado = false;
+              if (!tracoSendoRiscado) return;
+              const copia = tracoSendoRiscado.pontos.slice();
+              await OBR.scene.local.updateItems([ID_TRACO_ATIVO], (itens) => {
+                for (const item of itens) item.points = copia;
+              });
+            });
+          }
+        },
+        async onToolDragEnd() {
+          await OBR.scene.local.deleteItems([ID_TRACO_ATIVO]);
+          if (tracoSendoRiscado && tracoSendoRiscado.pontos.length >= 2) {
+            tracosPendentes.push(tracoSendoRiscado);
+            tracoSendoRiscado = null;
+            await atualizarPreviaTempoReal();
+          }
+        },
+        async onToolDragCancel() {
+          tracoSendoRiscado = null;
+          await OBR.scene.local.deleteItems([ID_TRACO_ATIVO]);
+        }
+      });
+
+      // MODO 2: Borracha para apagar paredes
+      await OBR.tool.createMode({
+        id: `${ID_EXTENSAO}/modo-borracha`,
+        icons: [
+          {
+            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
+            label: "Borracha (Apagar Parede)",
+            filter: { activeTools: [idFerramenta], roles: ["GM"] }
+          }
+        ],
+        cursors: [{ cursor: "pointer" }],
+        async onToolClick(_, event) {
+          await apagarParedeNoPonto(event.pointerPosition, 26);
+        },
+        async onToolDragMove(_, event) {
+          await apagarParedeNoPonto(event.pointerPosition, 24);
+        }
+      });
+
+      // Ação rápida na barra da ferramenta: Concluir
+      await OBR.tool.createAction({
+        id: `${ID_EXTENSAO}/acao-concluir`,
+        icons: [
+          {
+            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
+            label: "Concluir Paredes Riscadas",
+            filter: { activeTools: [idFerramenta], roles: ["GM"] }
+          }
+        ],
+        async onClick() {
+          await concluirTracos();
+        }
+      });
+
+      // Inicializa quando a cena estiver pronta
+      async function iniciarCena() {
+        if (!(await OBR.scene.isReady())) return;
+        const meta = await OBR.scene.getMetadata();
+        if (meta[CHAVE_CONFIG]) {
+          configCena = { ...configCena, ...meta[CHAVE_CONFIG] };
+        }
+        const paredes = await obterParedesCena();
+        await renderizarParedesMestre(paredes);
+        await notificarPainel();
+      }
+
+      await iniciarCena();
+      OBR.scene.onReadyChange(async (pronta) => {
+        if (pronta) await iniciarCena();
+      });
+
+      // Bloqueia movimento de tokens através de paredes fechadas (se ativado)
+      OBR.scene.items.onChange(async (itens) => {
+        if (!configCena.bloquearMovimentoTokens) return;
+        const role = await OBR.player.getRole();
+        if (role !== "GM") return;
+
+        const paredes = await obterParedesCena();
+        if (paredes.length === 0) return;
+
+        const tokens = itens.filter((i) => i.layer === "CHARACTER");
+        const paraVoltar = [];
+
+        for (const tk of tokens) {
+          const posAnt = ultimasPosicoesTokens.get(tk.id);
+          if (posAnt && (posAnt.x !== tk.position.x || posAnt.y !== tk.position.y)) {
+            const bateu = paredes.some(
+              (p) =>
+                !p.aberta &&
+                segmentosSeCruzam(
+                  posAnt,
+                  tk.position,
+                  { x: p.x1, y: p.y1 },
+                  { x: p.x2, y: p.y2 }
+                )
+            );
+            if (bateu) {
+              paraVoltar.push({ id: tk.id, pos: posAnt });
+              continue;
+            }
+          }
+          ultimasPosicoesTokens.set(tk.id, { x: tk.position.x, y: tk.position.y });
+        }
+
+        if (paraVoltar.length > 0) {
+          await OBR.scene.items.updateItems(
+            paraVoltar.map((x) => x.id),
+            (lista) => {
+              for (const item of lista) {
+                const alvo = paraVoltar.find((x) => x.id === item.id);
+                if (alvo) item.position = alvo.pos;
+              }
+            }
+          );
+        }
       });
     });
   </script>

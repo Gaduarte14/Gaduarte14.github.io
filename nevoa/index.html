@@ -8,61 +8,312 @@
     :root {
       color-scheme: dark;
     }
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
-      padding: 14px;
+      padding: 12px;
       font-family: system-ui, -apple-system, sans-serif;
-      background: #16161e;
+      background: #14161f;
       color: #f1f5f9;
-      font-size: 14px;
+      font-size: 13px;
     }
     h2 {
-      margin: 0 0 8px 0;
-      font-size: 16px;
+      margin: 0 0 10px 0;
+      font-size: 15px;
       color: #fde047;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    .status {
-      padding: 10px 12px;
-      border-radius: 8px;
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
       background: #1e293b;
+      color: #38bdf8;
       border: 1px solid #334155;
-      margin-bottom: 12px;
-    }
-    .status.ok {
-      border-color: #22c55e;
-      color: #86efac;
     }
     .card {
       padding: 12px;
       border-radius: 10px;
-      background: #1f2430;
-      border: 1px solid #2e3646;
+      background: #1d212f;
+      border: 1px solid #2e354b;
       margin-bottom: 10px;
+    }
+    .card-title {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: #e2e8f0;
+    }
+    /* Botões grandes para mouse, toque e caneta */
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #3b4256;
+      background: #283044;
+      color: #f8fafc;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+    button:hover:not(:disabled) {
+      filter: brightness(1.15);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-concluir {
+      grid-column: span 2;
+      background: #16a34a;
+      border-color: #22c55e;
+      color: #ffffff;
+      font-size: 14px;
+    }
+    .btn-cancelar {
+      background: #991b1b;
+      border-color: #ef4444;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .row label {
+      flex: 1;
+      color: #cbd5e1;
+    }
+    input[type="range"] {
+      width: 125px;
+    }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .hint {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.35;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <h2>Paredes + Luz + Memória de Névoa</h2>
-  <div id="status" class="status">Conectando ao Owlbear Rodeo...</div>
+  <h2>
+    <span>1. Parede com Lápis</span>
+    <span id="contadorParedes" class="badge">0 paredes</span>
+  </h2>
 
+  <!-- Ações principais dos traços riscados (Botões grandes) -->
   <div class="card">
-    <strong>Fase 0 concluída!</strong>
-    <p style="margin: 6px 0 0 0; color: #94a3b8;">
-      O painel e o script de segundo plano estão conectados à sala.
-    </p>
+    <div class="card-title">
+      Traços no mapa (<span id="qtdTracos">0</span> pendente(s))
+    </div>
+    <div class="btn-grid">
+      <button id="btnConcluir" class="btn-concluir" disabled>
+        ✓ Concluir e Organizar Parede
+      </button>
+      <button id="btnDesfazerTraco" disabled>
+        ↩ Desfazer Traço
+      </button>
+      <button id="btnCancelar" class="btn-cancelar" disabled>
+        ✕ Cancelar
+      </button>
+    </div>
+    <div class="hint">
+      Dica: Selecione o ícone de sol na barra lateral do Owlbear, risque um ou vários traços no mapa (veja a prévia verde em tempo real) e clique em <b>Concluir</b>.
+    </div>
+  </div>
+
+  <!-- Controles de organização em tempo real -->
+  <div class="card">
+    <div class="card-title">Ajustes do Traço (Prévia em Tempo Real)</div>
+
+    <div class="row">
+      <label for="chkLinhaReta">Modo Linha Reta (ou segure Shift)</label>
+      <input type="checkbox" id="chkLinhaReta" />
+    </div>
+
+    <div class="row">
+      <label for="rngRDP">Simplificar (RDP): <b id="valRDP">10</b>px</label>
+      <input type="range" id="rngRDP" min="2" max="35" step="1" value="10" />
+    </div>
+
+    <div class="row">
+      <label for="rngAngulo">Endireitar Retas: <b id="valAngulo">8</b>°</label>
+      <input type="range" id="rngAngulo" min="0" max="20" step="1" value="8" />
+    </div>
+
+    <div class="row">
+      <label for="chkDiag45">Aceitar Diagonais de 45°</label>
+      <input type="checkbox" id="chkDiag45" checked />
+    </div>
+
+    <div class="row">
+      <label for="chkGrid">Alinhar Pontas ao Grid</label>
+      <input type="checkbox" id="chkGrid" />
+    </div>
+
+    <div class="row">
+      <label for="chkMeiaCelula">Passo de Meia Célula no Grid</label>
+      <input type="checkbox" id="chkMeiaCelula" checked />
+    </div>
+
+    <div class="row">
+      <label for="rngSnap">Raio p/ Grudar/Fechar: <b id="valSnap">22</b>px</label>
+      <input type="range" id="rngSnap" min="0" max="50" step="2" value="22" />
+    </div>
+  </div>
+
+  <!-- Histórico de Paredes Salvas -->
+  <div class="card">
+    <div class="card-title">Paredes da Cena (Desfazer / Refazer)</div>
+    <div class="btn-grid">
+      <button id="btnUndoParede" disabled>⟲ Desfazer Concluir</button>
+      <button id="btnRedoParede" disabled>⟳ Refazer Concluir</button>
+    </div>
+
+    <div class="row" style="margin-top: 6px;">
+      <label for="chkMostrarParedes">Mostrar linhas das paredes (Mestre)</label>
+      <input type="checkbox" id="chkMostrarParedes" checked />
+    </div>
+
+    <div class="row">
+      <label for="chkBloquearTokens">Bloquear movimento de tokens</label>
+      <input type="checkbox" id="chkBloquearTokens" checked />
+    </div>
+
+    <button id="btnLimparTudo" style="width: 100%; margin-top: 4px; background: #3f1d28; border-color: #be123c;">
+      Apagar Todas as Paredes da Cena
+    </button>
   </div>
 
   <script type="module">
-    import OBR from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+    const canal = new BroadcastChannel("nevoa3em1_canal");
 
-    const elStatus = document.getElementById("status");
+    const elQtdTracos = document.getElementById("qtdTracos");
+    const elContadorParedes = document.getElementById("contadorParedes");
+    const btnConcluir = document.getElementById("btnConcluir");
+    const btnDesfazerTraco = document.getElementById("btnDesfazerTraco");
+    const btnCancelar = document.getElementById("btnCancelar");
+    const btnUndoParede = document.getElementById("btnUndoParede");
+    const btnRedoParede = document.getElementById("btnRedoParede");
+    const btnLimparTudo = document.getElementById("btnLimparTudo");
 
-    OBR.onReady(async () => {
-      const role = await OBR.player.getRole();
-      const cenaPronta = await OBR.scene.isReady();
-      elStatus.className = "status ok";
-      elStatus.textContent = `Conectado! Perfil: ${role} | Cena carregada: ${cenaPronta ? "Sim" : "Não"}`;
+    const chkLinhaReta = document.getElementById("chkLinhaReta");
+    const rngRDP = document.getElementById("rngRDP");
+    const valRDP = document.getElementById("valRDP");
+    const rngAngulo = document.getElementById("rngAngulo");
+    const valAngulo = document.getElementById("valAngulo");
+    const chkDiag45 = document.getElementById("chkDiag45");
+    const chkGrid = document.getElementById("chkGrid");
+    const chkMeiaCelula = document.getElementById("chkMeiaCelula");
+    const rngSnap = document.getElementById("rngSnap");
+    const valSnap = document.getElementById("valSnap");
+    const chkMostrarParedes = document.getElementById("chkMostrarParedes");
+    const chkBloquearTokens = document.getElementById("chkBloquearTokens");
+
+    function enviarConfigAtualizada() {
+      valRDP.textContent = rngRDP.value;
+      valAngulo.textContent = rngAngulo.value;
+      valSnap.textContent = rngSnap.value;
+
+      canal.postMessage({
+        acao: "ATUALIZAR_CONFIG",
+        novosValores: {
+          modoLinhaReta: chkLinhaReta.checked,
+          toleranciaRDP: Number(rngRDP.value),
+          toleranciaAnguloGraus: Number(rngAngulo.value),
+          aceitarDiagonais45: chkDiag45.checked,
+          alinharAoGrid: chkGrid.checked,
+          passoGridMeiaCelula: chkMeiaCelula.checked,
+          raioSnap: Number(rngSnap.value),
+          mostrarParedesMestre: chkMostrarParedes.checked,
+          bloquearMovimentoTokens: chkBloquearTokens.checked
+        }
+      });
+    }
+
+    [
+      chkLinhaReta,
+      rngRDP,
+      rngAngulo,
+      chkDiag45,
+      chkGrid,
+      chkMeiaCelula,
+      rngSnap,
+      chkMostrarParedes,
+      chkBloquearTokens
+    ].forEach((el) => el.addEventListener("input", enviarConfigAtualizada));
+
+    btnConcluir.addEventListener("click", () =>
+      canal.postMessage({ acao: "CONCLUIR_TRACOS" })
+    );
+    btnDesfazerTraco.addEventListener("click", () =>
+      canal.postMessage({ acao: "DESFAZER_TRACO" })
+    );
+    btnCancelar.addEventListener("click", () =>
+      canal.postMessage({ acao: "CANCELAR_TRACOS" })
+    );
+    btnUndoParede.addEventListener("click", () =>
+      canal.postMessage({ acao: "DESFAZER_PAREDE" })
+    );
+    btnRedoParede.addEventListener("click", () =>
+      canal.postMessage({ acao: "REFAZER_PAREDE" })
+    );
+    btnLimparTudo.addEventListener("click", () => {
+      if (confirm("Deseja apagar todas as paredes desta cena?")) {
+        canal.postMessage({ acao: "LIMPAR_TODAS_PAREDES" });
+      }
     });
+
+    canal.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || msg.tipo !== "ESTADO_ATUALIZADO") return;
+
+      elQtdTracos.textContent = msg.qtdTracosPendentes;
+      elContadorParedes.textContent = `${msg.qtdParedesSalvas} parede(s)`;
+
+      const temPendentes = msg.qtdTracosPendentes > 0;
+      btnConcluir.disabled = !temPendentes;
+      btnDesfazerTraco.disabled = !temPendentes;
+      btnCancelar.disabled = !temPendentes;
+
+      btnUndoParede.disabled = !msg.podeDesfazer;
+      btnRedoParede.disabled = !msg.podeRefazer;
+
+      if (msg.configCena) {
+        chkLinhaReta.checked = Boolean(msg.configCena.modoLinhaReta);
+        rngRDP.value = msg.configCena.toleranciaRDP ?? 10;
+        valRDP.textContent = rngRDP.value;
+        rngAngulo.value = msg.configCena.toleranciaAnguloGraus ?? 8;
+        valAngulo.textContent = rngAngulo.value;
+        chkDiag45.checked = Boolean(msg.configCena.aceitarDiagonais45);
+        chkGrid.checked = Boolean(msg.configCena.alinharAoGrid);
+        chkMeiaCelula.checked = Boolean(msg.configCena.passoGridMeiaCelula);
+        rngSnap.value = msg.configCena.raioSnap ?? 22;
+        valSnap.textContent = rngSnap.value;
+        chkMostrarParedes.checked = Boolean(msg.configCena.mostrarParedesMestre);
+        chkBloquearTokens.checked = Boolean(msg.configCena.bloquearMovimentoTokens);
+      }
+    };
+
+    // Pede o estado inicial assim que abre o painel
+    canal.postMessage({ acao: "PEDIR_ESTADO" });
   </script>
 </body>
 </html>
