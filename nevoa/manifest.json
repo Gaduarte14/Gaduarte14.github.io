@@ -1,0 +1,16 @@
+{
+  "name": "Paredes, Luz e Memória de Névoa",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "author": "Gaduarte14",
+  "description": "Parede com lápis, luz com falloff suave e memória de névoa por token.",
+  "icon": "https://gaduarte14.github.io/nevoa/icon.svg",
+  "action": {
+    "title": "Paredes, Luz e Névoa",
+    "icon": "https://gaduarte14.github.io/nevoa/icon.svg",
+    "popover": "https://gaduarte14.github.io/nevoa/index.html",
+    "height": 600,
+    "width": 380
+  },
+  "background_url": "https://gaduarte14.github.io/nevoa/background.html"
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Background - Paredes, Luz e Névoa</title>
+</head>
+<body>
+  <script type="module">
+    import OBR from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+
+    const ID_EXTENSAO = "com.gaduarte14.nevoa3em1";
+
+    OBR.onReady(async () => {
+      console.log("[Névoa 3em1] Background iniciado com sucesso!");
+
+      // Cria o botão da ferramenta principal na barra lateral (para o Mestre)
+      await OBR.tool.create({
+        id: `${ID_EXTENSAO}/ferramenta-principal`,
+        icons: [
+          {
+            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
+            label: "Paredes e Luz",
+            filter: { roles: ["GM"] }
+          }
+        ]
+      });
+    });
+  </script>
+</body>
+</html>

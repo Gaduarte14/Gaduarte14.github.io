@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel - Paredes, Luz e Névoa</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      padding: 14px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #16161e;
+      color: #f1f5f9;
+      font-size: 14px;
+    }
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      color: #fde047;
+    }
+    .status {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      margin-bottom: 12px;
+    }
+    .status.ok {
+      border-color: #22c55e;
+      color: #86efac;
+    }
+    .card {
+      padding: 12px;
+      border-radius: 10px;
+      background: #1f2430;
+      border: 1px solid #2e3646;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Paredes + Luz + Memória de Névoa</h2>
+  <div id="status" class="status">Conectando ao Owlbear Rodeo...</div>
+
+  <div class="card">
+    <strong>Fase 0 concluída!</strong>
+    <p style="margin: 6px 0 0 0; color: #94a3b8;">
+      O painel e o script de segundo plano estão conectados à sala.
+    </p>
+  </div>
+
+  <script type="module">
+    import OBR from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+
+    const elStatus = document.getElementById("status");
+
+    OBR.onReady(async () => {
+      const role = await OBR.player.getRole();
+      const cenaPronta = await OBR.scene.isReady();
+      elStatus.className = "status ok";
+      elStatus.textContent = `Conectado! Perfil: ${role} | Cena carregada: ${cenaPronta ? "Sim" : "Não"}`;
+    });
+  </script>
+</body>
+</html>
