@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Background - Paredes, Luz e Memória de Névoa</title>
+  <title>Background - Paredes, Luz e Névoa</title>
 </head>
 <body>
   <script type="module">
@@ -31,382 +31,173 @@
     const ID_NEVOA_ESCURIDAO = `${ID_EXT}_nevoa_escuridao`;
 
     const CONFIG_PADRAO = {
-      versao: 1,
-      // Parte A: Paredes
       toleranciaRDP: 12,
       toleranciaAnguloGraus: 8,
       aceitarDiagonais45: true,
       alinharAoGrid: false,
       passoGridMeiaCelula: true,
       raioSnap: 25,
-      comprimentoMinimoSegmento: 16,
+      comprimentoMinimoSegmento: 14,
       modoLinhaReta: false,
+      autoConcluir: false,
       mostrarParedesMestre: true,
-      bloquearMovimentoTokens: true,
-      // Parte B: Luz com Falloff
       falloffPadrao: 0.5,
       corLuzPadrao: "#ffe8b6",
       passosGradienteLuz: 14,
-      // Parte C: Névoa 3 estados e Memória
       nevoaAtiva: true,
       corNevoaExplorada: "#181822",
-      opacidadeNevoaExplorada: 0.74,
-      fatorCelulaMemoria: 0.5,
-      ocultarTokensNaNevoa: true,
-      modoVisaoMestre: "TUDO" // "TUDO" | "PLAYERS" | id do token
+      opacidadeNevoaExplorada: 0.75,
+      modoVisaoMestre: "TUDO",
+      revelarTudo: false
     };
 
-    // =========================================================================
-    // 1. GEOMETRIA 2D DAS PAREDES (5 Etapas)
-    // =========================================================================
-    function distancia(a, b) {
-      return Math.hypot(b.x - a.x, b.y - a.y);
-    }
+    const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
-    function comprimentoTraco(pts) {
-      let t = 0;
-      for (let i = 1; i < pts.length; i++) t += distancia(pts[i - 1], pts[i]);
-      return t;
-    }
-
-    function distanciaPontoReta(p, a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
+    function projetarNoSeg(p, a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
       const c2 = dx * dx + dy * dy;
-      if (c2 === 0) return distancia(p, a);
-      return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / Math.sqrt(c2);
-    }
-
-    function projetarPontoNoSegmento(p, a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const c2 = dx * dx + dy * dy;
-      if (c2 === 0) return { x: a.x, y: a.y, t: 0, dist: distancia(p, a) };
+      if (c2 === 0) return { x: a.x, y: a.y, t: 0, dist: dist(p, a) };
       const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / c2));
       const proj = { x: a.x + t * dx, y: a.y + t * dy };
-      return { ...proj, t, dist: distancia(p, proj) };
+      return { ...proj, t, dist: dist(p, proj) };
     }
 
-    function mudancaAnguloGraus(a, b, c) {
-      const a1 = Math.atan2(b.y - a.y, b.x - a.x);
-      const a2 = Math.atan2(c.y - b.y, c.x - b.x);
-      let d = Math.abs(a2 - a1) * (180 / Math.PI);
-      return d > 180 ? 360 - d : d;
-    }
-
-    function etapa1Limpar(pts, compMin = 16) {
-      if (!pts || pts.length < 2) return [];
-      const limpos = [{ x: pts[0].x, y: pts[0].y }];
-      for (let i = 1; i < pts.length; i++) {
-        if (distancia(pts[i], limpos[limpos.length - 1]) >= 2) {
-          limpos.push({ x: pts[i].x, y: pts[i].y });
-        }
-      }
-      if (limpos.length < 2 || comprimentoTraco(limpos) < compMin) return [];
-      if (limpos.length <= 3) return limpos;
-
-      const suav = [limpos[0]];
-      for (let i = 1; i < limpos.length - 1; i++) {
-        if (mudancaAnguloGraus(limpos[i - 1], limpos[i], limpos[i + 1]) > 28) {
-          suav.push({ x: limpos[i].x, y: limpos[i].y });
-        } else {
-          suav.push({
-            x: limpos[i - 1].x * 0.25 + limpos[i].x * 0.5 + limpos[i + 1].x * 0.25,
-            y: limpos[i - 1].y * 0.25 + limpos[i].y * 0.5 + limpos[i + 1].y * 0.25
-          });
-        }
-      }
-      suav.push(limpos[limpos.length - 1]);
-      return suav;
-    }
-
-    function etapa2SimplificarRDP(pts, tol = 12) {
+    function simplificarRDP(pts, tol = 12) {
       if (pts.length <= 2) return pts.slice();
-      let maxD = 0;
-      let idx = 0;
+      let maxD = 0, idx = 0;
+      const a = pts[0], b = pts[pts.length - 1];
+      const dx = b.x - a.x, dy = b.y - a.y, c2 = dx * dx + dy * dy;
       for (let i = 1; i < pts.length - 1; i++) {
-        const d = distanciaPontoReta(pts[i], pts[0], pts[pts.length - 1]);
-        if (d > maxD) {
-          maxD = d;
-          idx = i;
-        }
+        const d = c2 === 0 ? dist(pts[i], a) : Math.abs(dy * pts[i].x - dx * pts[i].y + b.x * a.y - b.y * a.x) / Math.sqrt(c2);
+        if (d > maxD) { maxD = d; idx = i; }
       }
       if (maxD > tol) {
-        const esq = etapa2SimplificarRDP(pts.slice(0, idx + 1), tol);
-        const dir = etapa2SimplificarRDP(pts.slice(idx), tol);
-        return esq.slice(0, -1).concat(dir);
+        return simplificarRDP(pts.slice(0, idx + 1), tol).slice(0, -1).concat(simplificarRDP(pts.slice(idx), tol));
       }
-      return [{ x: pts[0].x, y: pts[0].y }, { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y }];
+      return [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
     }
 
-    function alinharAoGridValor(v, dpi, meia = true) {
-      const passo = meia ? dpi * 0.5 : dpi;
-      return Math.round(v / passo) * passo;
-    }
+    function organizarTracos(tracos, paredes, cfg, dpi = 150) {
+      const tolAng = Number(cfg.toleranciaAnguloGraus ?? 8);
+      const raioSnap = Number(cfg.raioSnap ?? 25);
+      const passoGrid = dpi * 0.5;
+      const segs = [];
 
-    function etapa3Endireitar(pts, cfg, dpi = 150) {
-      if (pts.length < 2) return pts;
-      const tol = Number(cfg.toleranciaAnguloGraus ?? 8);
-      const usar45 = Boolean(cfg.aceitarDiagonais45);
-      const res = pts.map((p) => ({ x: p.x, y: p.y }));
+      for (const t of tracos) {
+        if (!t.pontos || t.pontos.length < 2) continue;
+        let pts = t.linhaReta ? [t.pontos[0], t.pontos[t.pontos.length - 1]] : simplificarRDP(t.pontos, cfg.toleranciaRDP ?? 12);
+        pts = pts.map((p) => ({ x: p.x, y: p.y }));
 
-      for (let i = 0; i < res.length - 1; i++) {
-        const a = res[i];
-        const b = res[i + 1];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const absA = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
-
-        if (absA <= tol || Math.abs(absA - 180) <= tol) {
-          b.y = a.y;
-        } else if (Math.abs(absA - 90) <= tol) {
-          b.x = a.x;
-        } else if (usar45 && (Math.abs(absA - 45) <= tol || Math.abs(absA - 135) <= tol)) {
-          const m = (Math.abs(dx) + Math.abs(dy)) * 0.5;
-          b.x = a.x + Math.sign(dx || 1) * m;
-          b.y = a.y + Math.sign(dy || 1) * m;
-        }
-      }
-
-      if (cfg.alinharAoGrid) {
-        for (const p of res) {
-          p.x = alinharAoGridValor(p.x, dpi, cfg.passoGridMeiaCelula);
-          p.y = alinharAoGridValor(p.y, dpi, cfg.passoGridMeiaCelula);
-        }
-      }
-      return res;
-    }
-
-    function etapa4GrudarEFechar(tracos, paredesExistentes, raioSnap = 25) {
-      let atuais = paredesExistentes.map((p) => ({ ...p }));
-      const novos = [];
-
-      function grudar(pt, lista) {
-        let melhor = null;
-        let menD = raioSnap;
-        for (const par of lista) {
-          const d1 = distancia(pt, { x: par.x1, y: par.y1 });
-          if (d1 <= menD) {
-            menD = d1;
-            melhor = { x: par.x1, y: par.y1 };
-          }
-          const d2 = distancia(pt, { x: par.x2, y: par.y2 });
-          if (d2 <= menD) {
-            menD = d2;
-            melhor = { x: par.x2, y: par.y2 };
-          }
-        }
-        if (melhor) return melhor;
-
-        for (let i = 0; i < lista.length; i++) {
-          const par = lista[i];
-          const proj = projetarPontoNoSegmento(pt, { x: par.x1, y: par.y1 }, { x: par.x2, y: par.y2 });
-          if (proj.t > 0.05 && proj.t < 0.95 && proj.dist <= raioSnap) {
-            return { x: proj.x, y: proj.y };
-          }
-        }
-        return { x: pt.x, y: pt.y };
-      }
-
-      for (const ptsOrig of tracos) {
-        if (ptsOrig.length < 2) continue;
-        const pts = ptsOrig.map((p) => ({ x: p.x, y: p.y }));
-        if (pts.length >= 3 && distancia(pts[0], pts[pts.length - 1]) <= raioSnap * 1.3) {
-          pts[pts.length - 1] = { x: pts[0].x, y: pts[0].y };
-        } else {
-          const todas = atuais.concat(novos);
-          pts[0] = grudar(pts[0], todas);
-          pts[pts.length - 1] = grudar(pts[pts.length - 1], todas);
-        }
         for (let i = 0; i < pts.length - 1; i++) {
-          novos.push({
-            id: `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i}`,
-            x1: pts[i].x,
-            y1: pts[i].y,
-            x2: pts[i + 1].x,
-            y2: pts[i + 1].y,
-            porta: false,
-            aberta: false
-          });
+          const a = pts[i], b = pts[i + 1];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const absA = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
+          if (absA <= tolAng || Math.abs(absA - 180) <= tolAng) b.y = a.y;
+          else if (Math.abs(absA - 90) <= tolAng) b.x = a.x;
+          else if (cfg.aceitarDiagonais45 && (Math.abs(absA - 45) <= tolAng || Math.abs(absA - 135) <= tolAng)) {
+            const m = (Math.abs(dx) + Math.abs(dy)) * 0.5;
+            b.x = a.x + Math.sign(dx || 1) * m;
+            b.y = a.y + Math.sign(dy || 1) * m;
+          }
+        }
+
+        if (cfg.alinharAoGrid) {
+          for (const p of pts) {
+            p.x = Math.round(p.x / passoGrid) * passoGrid;
+            p.y = Math.round(p.y / passoGrid) * passoGrid;
+          }
+        }
+
+        if (pts.length >= 3 && dist(pts[0], pts[pts.length - 1]) <= raioSnap * 1.4) {
+          pts[pts.length - 1] = { x: pts[0].x, y: pts[0].y };
+        }
+
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (dist(pts[i], pts[i + 1]) >= 8) {
+            segs.push({
+              id: `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i}`,
+              x1: pts[i].x,
+              y1: pts[i].y,
+              x2: pts[i + 1].x,
+              y2: pts[i + 1].y,
+              porta: false,
+              aberta: false
+            });
+          }
         }
       }
-      return { novosSegmentos: novos, todas: atuais.concat(novos) };
+      return segs;
     }
 
-    function etapa5LimpezaFinal(segs, compMin = 16) {
-      const filt = segs.filter((s) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= Math.max(4, compMin * 0.5));
-      const unicos = [];
-      const chaves = new Set();
-      for (const s of filt) {
-        const p1 = `${Math.round(s.x1)},${Math.round(s.y1)}`;
-        const p2 = `${Math.round(s.x2)},${Math.round(s.y2)}`;
-        const ch = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
-        if (!chaves.has(ch)) {
-          chaves.add(ch);
-          unicos.push(s);
-        }
-      }
-      return unicos;
-    }
-
-    function organizarTracosParede(tracosBrutos, paredesExistentes, cfg, dpi = 150) {
-      const proc = [];
-      for (const t of tracosBrutos) {
-        if (t.linhaReta && t.pontos.length === 2) {
-          proc.push(etapa3Endireitar(t.pontos, cfg, dpi));
-          continue;
-        }
-        const l = etapa1Limpar(t.pontos, cfg.comprimentoMinimoSegmento);
-        if (l.length < 2) continue;
-        const s = etapa2SimplificarRDP(l, cfg.toleranciaRDP);
-        proc.push(etapa3Endireitar(s, cfg, dpi));
-      }
-      const { novosSegmentos } = etapa4GrudarEFechar(proc, paredesExistentes, cfg.raioSnap);
-      return etapa5LimpezaFinal(novosSegmentos, cfg.comprimentoMinimoSegmento);
-    }
-
-    function segmentosSeCruzam(a, b, c, d) {
-      const ccw = (p1, p2, p3) => (p3.y - p1.y) * (p2.x - p1.x) > (p2.y - p1.y) * (p3.x - p1.x);
-      return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
-    }
-
-    // =========================================================================
-    // 2. VISIBILIDADE 2D, LUZ COM FALLOFF E MEMÓRIA DE NÉVOA (3 ESTADOS)
-    // =========================================================================
-    function intersecaoRaioSegmento(ox, oy, dx, dy, x1, y1, x2, y2) {
-      const sx = x2 - x1;
-      const sy = y2 - y1;
-      const den = dx * sy - dy * sx;
-      if (Math.abs(den) < 1e-8) return null;
-      const t = ((x1 - ox) * sy - (y1 - oy) * sx) / den;
-      const u = ((x1 - ox) * dy - (y1 - oy) * dx) / den;
-      return t >= 0 && u >= -1e-4 && u <= 1.0001 ? t : null;
-    }
-
-    function calcularPoligonoVisibilidade(origem, raio, paredes, passos = 44) {
+    function calcularPoligonoVisibilidade(origem, raio, paredes, passos = 40) {
       if (raio <= 0) return [];
-      const ox = origem.x;
-      const oy = origem.y;
-      const locais = paredes.filter((p) => {
-        if (p.aberta) return false;
-        return !(
-          Math.max(p.x1, p.x2) < ox - raio ||
-          Math.min(p.x1, p.x2) > ox + raio ||
-          Math.max(p.y1, p.y2) < oy - raio ||
-          Math.min(p.y1, p.y2) > oy + raio
-        );
-      });
-
-      if (locais.length === 0) {
-        const circ = [];
-        for (let i = 0; i < passos; i++) {
-          const a = (i / passos) * Math.PI * 2;
-          circ.push({ x: ox + Math.cos(a) * raio, y: oy + Math.sin(a) * raio });
-        }
-        return circ;
-      }
+      const ox = origem.x, oy = origem.y;
+      const locais = paredes.filter((p) => !p.aberta && !(
+        Math.max(p.x1, p.x2) < ox - raio || Math.min(p.x1, p.x2) > ox + raio ||
+        Math.max(p.y1, p.y2) < oy - raio || Math.min(p.y1, p.y2) > oy + raio
+      ));
 
       const angs = [];
-      for (let i = 0; i < passos; i++) {
-        angs.push((i / passos) * Math.PI * 2 - Math.PI);
-      }
+      for (let i = 0; i < passos; i++) angs.push((i / passos) * Math.PI * 2 - Math.PI);
       const eps = 0.0002;
-      const r2 = raio * raio * 1.25;
       for (const p of locais) {
-        if ((p.x1 - ox) ** 2 + (p.y1 - oy) ** 2 <= r2) {
-          const a = Math.atan2(p.y1 - oy, p.x1 - ox);
-          angs.push(a - eps, a, a + eps);
-        }
-        if ((p.x2 - ox) ** 2 + (p.y2 - oy) ** 2 <= r2) {
-          const a = Math.atan2(p.y2 - oy, p.x2 - ox);
-          angs.push(a - eps, a, a + eps);
-        }
+        const a1 = Math.atan2(p.y1 - oy, p.x1 - ox);
+        const a2 = Math.atan2(p.y2 - oy, p.x2 - ox);
+        angs.push(a1 - eps, a1, a1 + eps, a2 - eps, a2, a2 + eps);
       }
       angs.sort((a, b) => a - b);
 
       const poly = [];
       for (let i = 0; i < angs.length; i++) {
         if (i > 0 && Math.abs(angs[i] - angs[i - 1]) < 1e-5) continue;
-        const dx = Math.cos(angs[i]);
-        const dy = Math.sin(angs[i]);
+        const dx = Math.cos(angs[i]), dy = Math.sin(angs[i]);
         let menT = raio;
         for (const p of locais) {
-          const t = intersecaoRaioSegmento(ox, oy, dx, dy, p.x1, p.y1, p.x2, p.y2);
-          if (t !== null && t < menT) menT = t;
+          const sx = p.x2 - p.x1, sy = p.y2 - p.y1;
+          const den = dx * sy - dy * sx;
+          if (Math.abs(den) < 1e-8) continue;
+          const t = ((p.x1 - ox) * sy - (p.y1 - oy) * sx) / den;
+          const u = ((p.x1 - ox) * dy - (p.y1 - oy) * dx) / den;
+          if (t >= 0 && u >= -1e-4 && u <= 1.0001 && t < menT) menT = t;
         }
         poly.push({ x: ox + dx * menT, y: oy + dy * menT });
       }
       return poly;
     }
 
-    function recortarPoligonoNoRaio(poly, origem, rAlvo) {
-      return poly.map((pt) => {
-        const vx = pt.x - origem.x;
-        const vy = pt.y - origem.y;
-        const d = Math.hypot(vx, vy);
-        if (d <= rAlvo || d === 0) return { x: pt.x, y: pt.y };
-        const esc = rAlvo / d;
-        return { x: origem.x + vx * esc, y: origem.y + vy * esc };
-      });
-    }
-
-    function pontoDentroPoligono(pt, poly) {
-      if (!poly || poly.length < 3) return false;
-      let dentro = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const xi = poly[i].x, yi = poly[i].y;
-        const xj = poly[j].x, yj = poly[j].y;
-        if (yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-12) + xi) {
-          dentro = !dentro;
-        }
-      }
-      return dentro;
-    }
-
-    function poligonoParaComandos(poly) {
+    function polyParaCmds(poly) {
       if (!poly || poly.length < 3) return [];
-      const cmds = [[Command.MOVE, poly[0].x, poly[0].y]];
-      for (let i = 1; i < poly.length; i++) cmds.push([Command.LINE, poly[i].x, poly[i].y]);
-      cmds.push([Command.CLOSE]);
-      return cmds;
+      const c = [[Command.MOVE, poly[0].x, poly[0].y]];
+      for (let i = 1; i < poly.length; i++) c.push([Command.LINE, poly[i].x, poly[i].y]);
+      c.push([Command.CLOSE]);
+      return c;
     }
 
-    // Intensidade suave (1 - d^2)^(1 + 3*falloff) -> zero corte seco em d = 1
-    function calcularIntensidadeFalloff(d, falloff = 0.5) {
-      if (d >= 1) return 0;
-      if (d <= 0) return 1;
-      const exp = 1.0 + Math.max(0, Math.min(1, falloff)) * 3.0;
-      return Math.pow(1 - d * d, exp);
-    }
-
-    // FUNÇÃO ÚNICA DE LUZ COM FALLOFF (usada por tokens e por luzes soltas)
-    function gerarItensLuzFalloff(idBase, origem, raioPx, cor, falloff, polyVis, numPassos = 14) {
+    // Função única de Luz com Falloff suave (na camada DRAWING para aparecer sempre!)
+    function gerarLuzFalloff(idBase, origem, raioPx, cor, falloff, polyVis, passos = 14) {
       if (!polyVis || polyVis.length < 3 || raioPx <= 0) return [];
-      const opMax = 0.35;
+      const exp = 1.0 + Math.max(0, Math.min(1, falloff ?? 0.5)) * 3.0;
+      const fInt = (d) => (d >= 1 ? 0 : Math.pow(1 - d * d, exp));
       const itens = [];
-      for (let k = numPassos; k >= 1; k--) {
-        const dExt = k / numPassos;
-        const dInt = (k - 1) / numPassos;
-        const deltaOp =
-          (calcularIntensidadeFalloff(dInt, falloff) - calcularIntensidadeFalloff(dExt, falloff)) *
-          opMax;
+
+      for (let k = passos; k >= 1; k--) {
+        const dExt = k / passos, dInt = (k - 1) / passos;
+        const deltaOp = (fInt(dInt) - fInt(dExt)) * 0.38;
         if (deltaOp <= 0.001) continue;
-
-        const polyCamada =
-          k === numPassos ? polyVis : recortarPoligonoNoRaio(polyVis, origem, raioPx * dExt);
-        const cmds = poligonoParaComandos(polyCamada);
-        if (!cmds.length) continue;
-
+        const rAlvo = raioPx * dExt;
+        const polyCamada = k === passos ? polyVis : polyVis.map((pt) => {
+          const vx = pt.x - origem.x, vy = pt.y - origem.y, d = Math.hypot(vx, vy);
+          return d <= rAlvo || d === 0 ? pt : { x: origem.x + (vx * rAlvo) / d, y: origem.y + (vy * rAlvo) / d };
+        });
         itens.push(
           buildPath()
             .id(`${PREFIXO_RENDER_LUZ}${idBase}_${k}`)
-            .name("Luz com Falloff")
-            .commands(cmds)
+            .commands(polyParaCmds(polyCamada))
             .fillColor(cor || "#ffe8b6")
             .fillOpacity(deltaOp)
             .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(100 + (numPassos - k))
+            .layer("DRAWING")
+            .zIndex(1000 + (passos - k))
             .locked(true)
             .disableHit(true)
             .build()
@@ -415,220 +206,84 @@
       return itens;
     }
 
-    // Compressão RLE + Base64 da grade de memória por token
-    function comprimirRLE(bitset) {
-      const rle = [];
-      let i = 0;
-      while (i < bitset.length) {
-        const v = bitset[i];
-        let c = 1;
-        while (i + c < bitset.length && bitset[i + c] === v && c < 255) c++;
-        rle.push(c, v);
-        i += c;
-      }
-      let bin = "";
-      for (let j = 0; j < rle.length; j++) bin += String.fromCharCode(rle[j]);
-      return btoa(bin);
-    }
-
-    function descomprimirRLE(b64, tamBytes) {
-      const res = new Uint8Array(tamBytes);
-      if (!b64) return res;
-      try {
-        const bin = atob(b64);
-        let out = 0;
-        for (let i = 0; i < bin.length; i += 2) {
-          const c = bin.charCodeAt(i);
-          const v = bin.charCodeAt(i + 1);
-          for (let k = 0; k < c && out < res.length; k++) res[out++] = v;
-        }
-      } catch (_) {}
-      return res;
-    }
-
-    function calcularGradeCena(itensCena, dpi, fator = 0.5) {
-      const celPx = Math.max(30, Math.round(dpi * fator));
-      let minX = -2500, minY = -2500, maxX = 2500, maxY = 2500;
-      const mapas = itensCena.filter((i) => i.layer === "MAP");
-      if (mapas.length > 0) {
-        minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
-        for (const m of mapas) {
-          const w = (m.image?.width || 2000) * (m.scale?.x || 1);
-          const h = (m.image?.height || 2000) * (m.scale?.y || 1);
-          minX = Math.min(minX, m.position.x - w);
-          minY = Math.min(minY, m.position.y - h);
-          maxX = Math.max(maxX, m.position.x + w * 2);
-          maxY = Math.max(maxY, m.position.y + h * 2);
-        }
-      }
-      minX = Math.floor(minX / celPx) * celPx;
-      minY = Math.floor(minY / celPx) * celPx;
-      const cols = Math.min(180, Math.max(20, Math.ceil((maxX - minX) / celPx)));
-      const lins = Math.min(180, Math.max(20, Math.ceil((maxY - minY) / celPx)));
-      return {
-        origemX: minX,
-        origemY: minY,
-        celPx,
-        cols,
-        lins,
-        largura: cols * celPx,
-        altura: lins * celPx,
-        tamBytes: Math.ceil((cols * lins) / 8)
-      };
-    }
-
-    function converterBitsetParaFuros(bitset, grade) {
-      const cmds = [];
-      const vis = new Uint8Array(grade.cols * grade.lins);
-      const ler = (idx) => (bitset[idx >> 3] & (1 << (idx & 7))) !== 0;
-
-      for (let r = 0; r < grade.lins; r++) {
-        for (let c = 0; c < grade.cols; c++) {
-          const idx = r * grade.cols + c;
-          if (vis[idx] || !ler(idx)) continue;
-          let w = 1;
-          while (c + w < grade.cols && !vis[r * grade.cols + c + w] && ler(r * grade.cols + c + w)) w++;
-          let h = 1;
-          let ok = true;
-          while (r + h < grade.lins && ok) {
-            for (let k = 0; k < w; k++) {
-              const t = (r + h) * grade.cols + c + k;
-              if (vis[t] || !ler(t)) {
-                ok = false;
-                break;
-              }
-            }
-            if (ok) h++;
-          }
-          for (let dy = 0; dy < h; dy++) {
-            for (let dx = 0; dx < w; dx++) vis[(r + dy) * grade.cols + c + dx] = 1;
-          }
-          const x1 = grade.origemX + c * grade.celPx;
-          const y1 = grade.origemY + r * grade.celPx;
-          const x2 = x1 + w * grade.celPx;
-          const y2 = y1 + h * grade.celPx;
-          cmds.push(
-            [Command.MOVE, x1, y1],
-            [Command.LINE, x2, y1],
-            [Command.LINE, x2, y2],
-            [Command.LINE, x1, y2],
-            [Command.CLOSE]
-          );
-        }
-      }
-      return cmds;
-    }
-
-    // =========================================================================
-    // 3. MOTOR DE ATUALIZAÇÃO EM SEGUNDO PLANO
-    // =========================================================================
-    let tracoAtivo = null;
-    let ponto1Reta = null;
-    let atualizandoArrasto = false;
-    let timerGravarMemoria = null;
-    const ultimasPosicoesTokens = new Map();
-
-    async function obterConfigCena() {
+    async function obterCfg() {
       const meta = await OBR.scene.getMetadata();
       return { ...CONFIG_PADRAO, ...(meta[CHAVE_CONFIG] || {}) };
     }
 
-    async function obterParedesCena() {
+    async function obterParedes() {
       const meta = await OBR.scene.getMetadata();
       return meta[CHAVE_PAREDES]?.segmentos || [];
     }
 
-    // Atualiza a prévia verde em cima dos traços azuis pendentes
-    async function atualizarPreviaTracosLocais() {
+    async function atualizarPreviaVerde() {
       const locais = await OBR.scene.local.getItems();
-      const antigosPrevia = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA)).map((i) => i.id);
-      if (antigosPrevia.length > 0) await OBR.scene.local.deleteItems(antigosPrevia);
+      const ant = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA)).map((i) => i.id);
+      if (ant.length > 0) await OBR.scene.local.deleteItems(ant);
 
-      const brutos = locais
-        .filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]))
-        .map((i) => i.metadata[CHAVE_TRACO_BRUTO]);
-
+      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO])).map((i) => i.metadata[CHAVE_TRACO_BRUTO]);
       if (brutos.length === 0) return;
 
-      const cfg = await obterConfigCena();
+      const cfg = await obterCfg();
       const dpi = await OBR.scene.grid.getDpi();
-      const paredes = await obterParedesCena();
-      const organizados = organizarTracosParede(brutos, paredes, cfg, dpi);
-      const espessura = Math.max(10, Math.round(dpi * 0.07));
+      const paredes = await obterParedes();
+      const segs = organizarTracos(brutos, paredes, cfg, dpi);
+      const esp = Math.max(10, Math.round(dpi * 0.07));
 
-      const novosItens = organizados.map((seg, idx) =>
+      const novos = segs.map((s, idx) =>
         buildCurve()
           .id(`${PREFIXO_PREVIA}${idx}`)
-          .name("Prévia Parede Organizada")
-          .points([
-            { x: seg.x1, y: seg.y1 },
-            { x: seg.x2, y: seg.y2 }
-          ])
+          .points([{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }])
           .tension(0)
           .strokeColor("#a3e635")
-          .strokeWidth(espessura)
+          .strokeWidth(esp)
           .strokeOpacity(1)
           .fillOpacity(0)
-          .layer("CONTROL")
-          .zIndex(99999)
+          .layer("TEXT")
+          .zIndex(99000)
           .locked(true)
           .disableHit(true)
           .build()
       );
-
-      if (novosItens.length > 0) await OBR.scene.local.addItems(novosItens);
+      if (novos.length > 0) await OBR.scene.local.addItems(novos);
     }
 
-    // Renderiza paredes laranjas para o Mestre + Luzes com Falloff + Névoa de 3 Estados
-    async function recalcularTudoNaCena() {
+    async function recalcularCena() {
       if (!(await OBR.scene.isReady())) return;
-
       const role = await OBR.player.getRole();
-      const playerId = await OBR.player.getId();
-      const selecao = (await OBR.player.getSelection()) || [];
       const dpi = await OBR.scene.grid.getDpi();
-      const cfg = await obterConfigCena();
-      const paredes = await obterParedesCena();
+      const cfg = await obterCfg();
+      const paredes = await obterParedes();
       const itensCena = await OBR.scene.items.getItems();
 
-      // 1. Limpar itens locais antigos gerados pelo motor
-      const locaisAtuais = await OBR.scene.local.getItems();
-      const idsParaRemover = locaisAtuais
-        .filter(
-          (i) =>
-            i.id.startsWith(PREFIXO_PAREDE_GM) ||
-            i.id.startsWith(PREFIXO_RENDER_LUZ) ||
-            i.id.startsWith(PREFIXO_MARCADOR_LUZ) ||
-            i.id === ID_NEVOA_EXPLORADA ||
-            i.id === ID_NEVOA_ESCURIDAO
+      const locais = await OBR.scene.local.getItems();
+      const limpar = locais
+        .filter((i) =>
+          i.id.startsWith(PREFIXO_PAREDE_GM) ||
+          i.id.startsWith(PREFIXO_RENDER_LUZ) ||
+          i.id.startsWith(PREFIXO_MARCADOR_LUZ) ||
+          i.id === ID_NEVOA_EXPLORADA ||
+          i.id === ID_NEVOA_ESCURIDAO
         )
         .map((i) => i.id);
+      if (limpar.length > 0) await OBR.scene.local.deleteItems(limpar);
 
-      if (idsParaRemover.length > 0) {
-        await OBR.scene.local.deleteItems(idsParaRemover);
-      }
+      const adicionar = [];
 
-      const novosLocais = [];
-
-      // 2. Desenhar Paredes Laranjas para o Mestre (na camada CONTROL para nunca sumir!)
+      // 1. Paredes salvas (Laranja forte na camada TEXT para ficar sempre visível!)
       if (role === "GM" && cfg.mostrarParedesMestre && paredes.length > 0) {
-        const espParede = Math.max(8, Math.round(dpi * 0.06));
+        const esp = Math.max(9, Math.round(dpi * 0.065));
         for (const p of paredes) {
-          novosLocais.push(
+          adicionar.push(
             buildCurve()
               .id(`${PREFIXO_PAREDE_GM}${p.id}`)
-              .name("Parede (Mestre)")
-              .points([
-                { x: p.x1, y: p.y1 },
-                { x: p.x2, y: p.y2 }
-              ])
+              .points([{ x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 }])
               .tension(0)
-              .strokeColor(p.porta ? "#38bdf8" : "#ff6b00")
-              .strokeWidth(espParede)
+              .strokeColor("#ff6b00")
+              .strokeWidth(esp)
               .strokeOpacity(0.95)
-              .strokeDash(p.porta ? [14, 8] : [])
               .fillOpacity(0)
-              .layer("CONTROL")
+              .layer("TEXT")
               .zIndex(90000)
               .locked(true)
               .disableHit(true)
@@ -637,179 +292,71 @@
         }
       }
 
-      // 3. Coletar Fontes de Luz Soltas [Luz] + Tokens com Luz/Visão
-      const luzesSoltas = itensCena.filter((i) => Boolean(i.metadata?.[CHAVE_LUZ_SOLTA]));
-      const tokens = itensCena.filter((i) => i.layer === "CHARACTER");
-      const poligonosLuzAtivos = [];
+      // 2. Fontes de [Luz] Soltas e Tokens com Luz/Visão
+      const poligonosVisiveisAgora = [];
+      const poligonosMemoria = [];
 
-      // 3a. Luzes soltas da ferramenta [Luz]
-      for (const itemLuz of luzesSoltas) {
-        const lCfg = itemLuz.metadata[CHAVE_LUZ_SOLTA];
-        if (lCfg.ativa) {
-          const rPx = (lCfg.raioCelulas || 4) * dpi;
-          const poly = calcularPoligonoVisibilidade(itemLuz.position, rPx, paredes);
-          poligonosLuzAtivos.push(poly);
-          novosLocais.push(
-            ...gerarItensLuzFalloff(
-              itemLuz.id,
-              itemLuz.position,
-              rPx,
-              lCfg.cor || cfg.corLuzPadrao,
-              lCfg.falloff ?? cfg.falloffPadrao,
-              poly,
-              cfg.passosGradienteLuz
-            )
-          );
-        }
-
-        // Marcador visível só para o Mestre
-        if (role === "GM") {
-          novosLocais.push(
-            buildShape()
-              .id(`${PREFIXO_MARCADOR_LUZ}${itemLuz.id}`)
-              .shapeType("CIRCLE")
-              .width(28)
-              .height(28)
-              .position(itemLuz.position)
-              .fillColor(lCfg.ativa ? lCfg.cor || "#fde047" : "#64748b")
-              .fillOpacity(0.9)
-              .strokeColor("#ffffff")
-              .strokeWidth(3)
-              .layer("CONTROL")
-              .zIndex(95000)
-              .locked(true)
-              .disableHit(true)
-              .build()
-          );
-          if (selecao.includes(itemLuz.id)) {
+      for (const it of itensCena) {
+        const lCfg = it.metadata?.[CHAVE_LUZ_SOLTA];
+        if (lCfg) {
+          if (lCfg.ativa) {
             const rPx = (lCfg.raioCelulas || 4) * dpi;
-            novosLocais.push(
+            const poly = calcularPoligonoVisibilidade(it.position, rPx, paredes);
+            poligonosVisiveisAgora.push(poly);
+            adicionar.push(...gerarLuzFalloff(it.id, it.position, rPx, lCfg.cor, lCfg.falloff, poly, cfg.passosGradienteLuz));
+          }
+          if (role === "GM") {
+            adicionar.push(
               buildShape()
-                .id(`${PREFIXO_MARCADOR_LUZ}anel_${itemLuz.id}`)
+                .id(`${PREFIXO_MARCADOR_LUZ}${it.id}`)
                 .shapeType("CIRCLE")
-                .width(rPx * 2)
-                .height(rPx * 2)
-                .position(itemLuz.position)
-                .fillOpacity(0)
-                .strokeColor("#fde047")
-                .strokeWidth(3)
-                .strokeDash([12, 8])
-                .layer("CONTROL")
-                .zIndex(94999)
+                .width(34)
+                .height(34)
+                .position(it.position)
+                .fillColor(lCfg.ativa ? lCfg.cor || "#fde047" : "#64748b")
+                .fillOpacity(0.95)
+                .strokeColor("#000000")
+                .strokeWidth(4)
+                .layer("TEXT")
+                .zIndex(95000)
                 .locked(true)
                 .disableHit(true)
                 .build()
             );
           }
         }
-      }
 
-      // 3b. Tokens com Luz própria
-      for (const tk of tokens) {
-        const tCfg = tk.metadata?.[CHAVE_TOKEN_CFG];
-        if (tCfg?.luzAtiva) {
-          const rPx = (tCfg.raioLuz || 4) * dpi;
-          const poly = calcularPoligonoVisibilidade(tk.position, rPx, paredes);
-          poligonosLuzAtivos.push(poly);
-          novosLocais.push(
-            ...gerarItensLuzFalloff(
-              tk.id,
-              tk.position,
-              rPx,
-              tCfg.corLuz || cfg.corLuzPadrao,
-              tCfg.falloffLuz ?? cfg.falloffPadrao,
-              poly,
-              cfg.passosGradienteLuz
-            )
-          );
+        const tCfg = it.metadata?.[CHAVE_TOKEN_CFG];
+        if (tCfg && (tCfg.luzAtiva || tCfg.visaoAtiva)) {
+          const rLuz = tCfg.luzAtiva ? (tCfg.raioLuz || 4) * dpi : 0;
+          const rVis = tCfg.visaoAtiva ? (tCfg.raioVisao || 6) * dpi : 0;
+          const rMax = Math.max(rLuz, rVis);
+          const poly = calcularPoligonoVisibilidade(it.position, rMax, paredes);
+          poligonosVisiveisAgora.push(poly);
+
+          if (tCfg.luzAtiva) {
+            const polyL = rLuz === rMax ? poly : calcularPoligonoVisibilidade(it.position, rLuz, paredes);
+            adicionar.push(...gerarLuzFalloff(it.id, it.position, rLuz, tCfg.corLuz, tCfg.falloffLuz, polyL, cfg.passosGradienteLuz));
+          }
+
+          // Guarda trilha de memória simplificada nos metadados do token
+          const mem = it.metadata?.[CHAVE_TOKEN_MEM]?.pontos || [];
+          for (const pt of mem) {
+            poligonosMemoria.push(calcularPoligonoVisibilidade(pt.pos, pt.r, paredes, 24));
+          }
+          const ult = mem[mem.length - 1];
+          if (role === "GM" && (!ult || dist(ult.pos, it.position) > dpi * 0.6)) {
+            const novaMem = [...mem.slice(-25), { pos: { x: Math.round(it.position.x), y: Math.round(it.position.y) }, r: Math.round(rMax) }];
+            OBR.scene.items.updateItems([it.id], (lista) => {
+              for (const tk of lista) tk.metadata[CHAVE_TOKEN_MEM] = { pontos: novaMem };
+            });
+          }
         }
       }
 
-      // 4. Memória de Névoa de 3 Estados
+      // 3. Névoa de 3 Estados (na camada DRAWING para aparecer sempre em cima do mapa!)
       if (cfg.nevoaAtiva) {
-        const grade = calcularGradeCena(itensCena, dpi, cfg.fatorCelulaMemoria);
-        const bitsetUniao = new Uint8Array(grade.tamBytes);
-        const poligonosVisiveisAgora = [...poligonosLuzAtivos];
-        const memoriasModificadas = [];
-
-        // Filtra quais tokens contam para a visão atual deste cliente
-        const tokensVisaoCliente = tokens.filter((tk) => {
-          const tCfg = tk.metadata?.[CHAVE_TOKEN_CFG];
-          if (!tCfg || (!tCfg.luzAtiva && !tCfg.visaoAtiva)) return false;
-          if (role === "GM") {
-            if (cfg.modoVisaoMestre === "TUDO" || cfg.modoVisaoMestre === "PLAYERS") return true;
-            return tk.id === cfg.modoVisaoMestre;
-          }
-          return tk.createdUserId === playerId || tCfg.compartilharVisao;
-        });
-
-        for (const tk of tokensVisaoCliente) {
-          const tCfg = tk.metadata[CHAVE_TOKEN_CFG];
-          const rLuzPx = tCfg.luzAtiva ? (tCfg.raioLuz || 4) * dpi : 0;
-          const rVisPx = tCfg.visaoAtiva ? (tCfg.raioVisao || 6) * dpi : 0;
-          const rMaxPx = Math.max(rLuzPx, rVisPx);
-
-          const polyVisao = calcularPoligonoVisibilidade(tk.position, rMaxPx, paredes);
-          poligonosVisiveisAgora.push(polyVisao);
-
-          const memSalva = tk.metadata?.[CHAVE_TOKEN_MEM];
-          const bitsetTk = descomprimirRLE(memSalva?.b64, grade.tamBytes);
-
-          // Marca células vistas pelo token na memória dele
-          let mudou = false;
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const pt of polyVisao) {
-            if (pt.x < minX) minX = pt.x;
-            if (pt.y < minY) minY = pt.y;
-            if (pt.x > maxX) maxX = pt.x;
-            if (pt.y > maxY) maxY = pt.y;
-          }
-          const cIni = Math.max(0, Math.floor((minX - grade.origemX) / grade.celPx));
-          const cFim = Math.min(grade.cols - 1, Math.ceil((maxX - grade.origemX) / grade.celPx));
-          const lIni = Math.max(0, Math.floor((minY - grade.origemY) / grade.celPx));
-          const lFim = Math.min(grade.lins - 1, Math.ceil((maxY - grade.origemY) / grade.celPx));
-
-          for (let r = lIni; r <= lFim; r++) {
-            const cy = grade.origemY + (r + 0.5) * grade.celPx;
-            for (let c = cIni; c <= cFim; c++) {
-              const idx = r * grade.cols + c;
-              if ((bitsetTk[idx >> 3] & (1 << (idx & 7))) !== 0) continue;
-              const cx = grade.origemX + (c + 0.5) * grade.celPx;
-              if (pontoDentroPoligono({ x: cx, y: cy }, polyVisao)) {
-                bitsetTk[idx >> 3] |= 1 << (idx & 7);
-                mudou = true;
-              }
-            }
-          }
-
-          for (let b = 0; b < grade.tamBytes; b++) bitsetUniao[b] |= bitsetTk[b];
-
-          if (mudou && role === "GM") {
-            memoriasModificadas.push({ id: tk.id, b64: comprimirRLE(bitsetTk) });
-          }
-        }
-
-        // Grava a memória atualizada com debounce (sem travar durante arrasto)
-        if (memoriasModificadas.length > 0) {
-          clearTimeout(timerGravarMemoria);
-          timerGravarMemoria = setTimeout(async () => {
-            await OBR.scene.items.updateItems(
-              memoriasModificadas.map((m) => m.id),
-              (lista) => {
-                for (const it of lista) {
-                  const m = memoriasModificadas.find((x) => x.id === it.id);
-                  if (m) it.metadata[CHAVE_TOKEN_MEM] = { b64: m.b64, t: Date.now() };
-                }
-              }
-            );
-          }, 750);
-        }
-
-        const ehMestreLivre = role === "GM" && cfg.modoVisaoMestre === "TUDO";
-        const bx1 = grade.origemX - 1500;
-        const by1 = grade.origemY - 1500;
-        const bx2 = grade.origemX + grade.largura + 1500;
-        const by2 = grade.origemY + grade.altura + 1500;
+        const bx1 = -12000, by1 = -12000, bx2 = 12000, by2 = 12000;
         const contorno = [
           [Command.MOVE, bx1, by1],
           [Command.LINE, bx2, by1],
@@ -819,81 +366,91 @@
         ];
 
         const furosAgora = [];
-        for (const p of poligonosVisiveisAgora) furosAgora.push(...poligonoParaComandos(p));
+        for (const p of poligonosVisiveisAgora) furosAgora.push(...polyParaCmds(p));
 
-        // Camada 1: "A névoa de hoje" (Explorado, mas sem luz/visão agora)
-        novosLocais.push(
+        const furosMemoria = [...furosAgora];
+        for (const p of poligonosMemoria) furosMemoria.push(...polyParaCmds(p));
+
+        const mestreSuave = role === "GM" && cfg.modoVisaoMestre === "TUDO";
+        const opExplorado = mestreSuave ? 0.45 : (cfg.opacidadeNevoaExplorada ?? 0.75);
+        const opEscuridao = mestreSuave ? 0.72 : 1.0;
+
+        // Estado 2: "A névoa de hoje" (Explorado, sem luz agora)
+        adicionar.push(
           buildPath()
             .id(ID_NEVOA_EXPLORADA)
-            .name("Névoa Explorada")
             .commands([...contorno, ...furosAgora])
             .fillRule("EVENODD")
             .fillColor(cfg.corNevoaExplorada || "#181822")
-            .fillOpacity(ehMestreLivre ? 0.28 : cfg.opacidadeNevoaExplorada ?? 0.74)
+            .fillOpacity(opExplorado)
             .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(500)
+            .layer("DRAWING")
+            .zIndex(5000)
             .locked(true)
             .disableHit(true)
             .build()
         );
 
-        // Camada 2: Escuridão Total (Nunca explorado)
-        const furosExplorados = converterBitsetParaFuros(bitsetUniao, grade);
-        novosLocais.push(
-          buildPath()
-            .id(ID_NEVOA_ESCURIDAO)
-            .name("Escuridão Nunca Explorado")
-            .commands([...contorno, ...furosExplorados, ...furosAgora])
-            .fillRule("EVENODD")
-            .fillColor("#000000")
-            .fillOpacity(ehMestreLivre ? 0.52 : 1.0)
-            .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(600)
-            .locked(true)
-            .disableHit(true)
-            .build()
-        );
+        // Estado 1: Escuridão Total (Nunca explorado)
+        if (!cfg.revelarTudo) {
+          adicionar.push(
+            buildPath()
+              .id(ID_NEVOA_ESCURIDAO)
+              .commands([...contorno, ...furosMemoria])
+              .fillRule("EVENODD")
+              .fillColor("#000000")
+              .fillOpacity(opEscuridao)
+              .strokeOpacity(0)
+              .layer("DRAWING")
+              .zIndex(6000)
+              .locked(true)
+              .disableHit(true)
+              .build()
+          );
+        }
       }
 
-      if (novosLocais.length > 0) {
-        await OBR.scene.local.addItems(novosLocais);
-      }
+      if (adicionar.length > 0) await OBR.scene.local.addItems(adicionar);
     }
 
-    // Salva um novo traço bruto no OBR.scene.local para o painel ver imediatamente
-    async function registrarTracoBrutoLocal(pontos, linhaReta) {
+    async function salvarNovoTraco(pontos, linhaReta) {
+      const cfg = await obterCfg();
       const dpi = await OBR.scene.grid.getDpi();
-      const esp = Math.max(7, Math.round(dpi * 0.05));
-      const id = `${ID_EXT}_bruto_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 
-      const curva = buildCurve()
-        .id(id)
-        .name("Traço Provisório")
+      // Se "Concluir automático" estiver marcado, já grava a parede direto!
+      if (cfg.autoConcluir) {
+        const atuais = await obterParedes();
+        const novos = organizarTracos([{ pontos, linhaReta }], atuais, cfg, dpi);
+        await OBR.scene.setMetadata({
+          [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: [...atuais, ...novos] }
+        });
+        return;
+      }
+
+      const esp = Math.max(8, Math.round(dpi * 0.05));
+      const item = buildCurve()
+        .id(`${ID_EXT}_bruto_${Date.now()}`)
         .points(pontos)
         .tension(0)
         .strokeColor("#00e5ff")
         .strokeWidth(esp)
         .strokeDash([esp * 2, esp * 1.5])
-        .strokeOpacity(0.95)
         .fillOpacity(0)
-        .layer("CONTROL")
+        .layer("TEXT")
         .zIndex(98000)
         .locked(true)
         .disableHit(true)
-        .metadata({
-          [CHAVE_TRACO_BRUTO]: { pontos, linhaReta }
-        })
+        .metadata({ [CHAVE_TRACO_BRUTO]: { pontos, linhaReta } })
         .build();
 
-      await OBR.scene.local.addItems([curva]);
-      await atualizarPreviaTracosLocais();
+      await OBR.scene.local.addItems([item]);
+      await atualizarPreviaVerde();
     }
 
-    // =========================================================================
-    // 4. INICIALIZAÇÃO DAS FERRAMENTAS NO OWLBEAR
-    // =========================================================================
+    let tracoAtivo = null;
+    let ponto1Reta = null;
+    let ocupado = false;
+
     OBR.onReady(async () => {
       const idFerramenta = `${ID_EXT}/ferramenta-principal`;
       const idModoLapis = `${ID_EXT}/modo-lapis`;
@@ -903,269 +460,111 @@
       await OBR.tool.create({
         id: idFerramenta,
         defaultMode: idModoLapis,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "Paredes, Luz e Névoa",
-            filter: { roles: ["GM"] }
-          }
-        ]
+        icons: [{ icon: "https://gaduarte14.github.io/nevoa/icon.svg", label: "Paredes, Luz e Névoa", filter: { roles: ["GM"] } }]
       });
 
-      // MODO 1: Lápis / Linha Reta de Parede
       await OBR.tool.createMode({
         id: idModoLapis,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "1. Desenhar Parede (Lápis/Reta)",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
-          }
-        ],
+        icons: [{ icon: "https://gaduarte14.github.io/nevoa/icon.svg", label: "1. Desenhar Parede (Lápis)", filter: { activeTools: [idFerramenta], roles: ["GM"] } }],
         cursors: [{ cursor: "crosshair" }],
-        async onToolClick(_, event) {
-          const cfg = await obterConfigCena();
-          const dpi = await OBR.scene.grid.getDpi();
-          let pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          if (cfg.alinharAoGrid) {
-            pt.x = alinharAoGridValor(pt.x, dpi, cfg.passoGridMeiaCelula);
-            pt.y = alinharAoGridValor(pt.y, dpi, cfg.passoGridMeiaCelula);
-          }
-
+        async onToolClick(_, ev) {
+          const pt = { x: ev.pointerPosition.x, y: ev.pointerPosition.y };
           if (!ponto1Reta) {
             ponto1Reta = pt;
-            // Desenha uma bolinha azul visível no Ponto 1
-            const marcadorP1 = buildShape()
-              .id(ID_PONTO1_RETA)
-              .shapeType("CIRCLE")
-              .width(22)
-              .height(22)
-              .position(pt)
-              .fillColor("#00e5ff")
-              .fillOpacity(1)
-              .strokeColor("#ffffff")
-              .strokeWidth(3)
-              .layer("CONTROL")
-              .zIndex(99999)
-              .locked(true)
-              .disableHit(true)
-              .build();
-            await OBR.scene.local.addItems([marcadorP1]);
+            await OBR.scene.local.addItems([
+              buildShape().id(ID_PONTO1_RETA).shapeType("CIRCLE").width(26).height(26).position(pt).fillColor("#00e5ff").strokeColor("#ffffff").strokeWidth(3).layer("TEXT").zIndex(99999).locked(true).disableHit(true).build()
+            ]);
           } else {
             const p1 = ponto1Reta;
             ponto1Reta = null;
             await OBR.scene.local.deleteItems([ID_PONTO1_RETA]);
-            await registrarTracoBrutoLocal([p1, pt], true);
+            await salvarNovoTraco([p1, pt], true);
           }
         },
-        async onToolDragStart(_, event) {
+        async onToolDragStart(_, ev) {
           ponto1Reta = null;
           await OBR.scene.local.deleteItems([ID_PONTO1_RETA]);
-
-          const cfg = await obterConfigCena();
-          const usarReta = Boolean(event.shiftKey || cfg.modoLinhaReta);
-          const p0 = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          const p1 = { x: p0.x + 1, y: p0.y + 1 };
-          tracoAtivo = { pontos: [p0, p1], linhaReta: usarReta };
-
+          const cfg = await obterCfg();
           const dpi = await OBR.scene.grid.getDpi();
           const esp = Math.max(8, Math.round(dpi * 0.055));
+          const p0 = { x: ev.pointerPosition.x, y: ev.pointerPosition.y };
+          tracoAtivo = { pontos: [p0, { x: p0.x + 1, y: p0.y + 1 }], linhaReta: Boolean(ev.shiftKey || cfg.modoLinhaReta) };
 
-          const itemArrasto = buildCurve()
-            .id(ID_TRACO_ARRASTO)
-            .points(tracoAtivo.pontos)
-            .tension(0)
-            .strokeColor("#00e5ff")
-            .strokeWidth(esp)
-            .strokeDash([esp * 2, esp * 1.5])
-            .fillOpacity(0)
-            .layer("CONTROL")
-            .zIndex(99999)
-            .locked(true)
-            .disableHit(true)
-            .build();
-
-          await OBR.scene.local.addItems([itemArrasto]);
+          await OBR.scene.local.addItems([
+            buildCurve().id(ID_TRACO_ARRASTO).points(tracoAtivo.pontos).tension(0).strokeColor("#00e5ff").strokeWidth(esp).strokeDash([esp * 2, esp * 1.5]).fillOpacity(0).layer("TEXT").zIndex(99999).locked(true).disableHit(true).build()
+          ]);
         },
-        onToolDragMove(_, event) {
+        onToolDragMove(_, ev) {
           if (!tracoAtivo) return;
-          const pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          if (tracoAtivo.linhaReta) {
-            tracoAtivo.pontos = [tracoAtivo.pontos[0], pt];
-          } else {
-            const ult = tracoAtivo.pontos[tracoAtivo.pontos.length - 1];
-            if (Math.hypot(pt.x - ult.x, pt.y - ult.y) >= 4) {
-              tracoAtivo.pontos.push(pt);
-            }
-          }
+          const pt = { x: ev.pointerPosition.x, y: ev.pointerPosition.y };
+          if (tracoAtivo.linhaReta) tracoAtivo.pontos = [tracoAtivo.pontos[0], pt];
+          else if (dist(pt, tracoAtivo.pontos[tracoAtivo.pontos.length - 1]) >= 4) tracoAtivo.pontos.push(pt);
 
-          if (!atualizandoArrasto) {
-            atualizandoArrasto = true;
+          if (!ocupado) {
+            ocupado = true;
             requestAnimationFrame(async () => {
               try {
                 if (tracoAtivo) {
-                  const copia = tracoAtivo.pontos.slice();
-                  await OBR.scene.local.updateItems([ID_TRACO_ARRASTO], (itens) => {
-                    for (const i of itens) i.points = copia;
-                  });
+                  const pts = tracoAtivo.pontos.slice();
+                  await OBR.scene.local.updateItems([ID_TRACO_ARRASTO], (l) => { for (const i of l) i.points = pts; });
                 }
-              } finally {
-                atualizandoArrasto = false;
-              }
+              } finally { ocupado = false; }
             });
           }
         },
         async onToolDragEnd() {
           await OBR.scene.local.deleteItems([ID_TRACO_ARRASTO]);
           if (tracoAtivo && tracoAtivo.pontos.length >= 2) {
-            const finalizado = tracoAtivo;
+            const t = tracoAtivo;
             tracoAtivo = null;
-            await registrarTracoBrutoLocal(finalizado.pontos, finalizado.linhaReta);
+            await salvarNovoTraco(t.pontos, t.linhaReta);
           }
-        },
-        async onToolDragCancel() {
-          tracoAtivo = null;
-          await OBR.scene.local.deleteItems([ID_TRACO_ARRASTO]);
         }
       });
 
-      // MODO 2: Ferramenta [Luz] (clicar no mapa cria uma fonte de luz invisível para players)
       await OBR.tool.createMode({
         id: idModoLuz,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "2. [Luz] Criar Fonte de Luz",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
-          }
-        ],
+        icons: [{ icon: "https://gaduarte14.github.io/nevoa/icon.svg", label: "2. [Luz] Criar Fonte de Luz", filter: { activeTools: [idFerramenta], roles: ["GM"] } }],
         cursors: [{ cursor: "pointer" }],
-        async onToolClick(_, event) {
-          const cfg = await obterConfigCena();
-          const itemLuz = buildShape()
+        async onToolClick(_, ev) {
+          const cfg = await obterCfg();
+          const nova = buildShape()
             .name("Fonte de Luz [Luz]")
             .shapeType("CIRCLE")
-            .width(42)
-            .height(42)
-            .position({ x: event.pointerPosition.x, y: event.pointerPosition.y })
+            .width(45)
+            .height(45)
+            .position(ev.pointerPosition)
             .fillOpacity(0)
             .strokeOpacity(0)
             .layer("PROP")
-            .metadata({
-              [CHAVE_LUZ_SOLTA]: {
-                ativa: true,
-                raioCelulas: 4,
-                cor: cfg.corLuzPadrao || "#ffe8b6",
-                falloff: cfg.falloffPadrao ?? 0.5
-              }
-            })
+            .metadata({ [CHAVE_LUZ_SOLTA]: { ativa: true, raioCelulas: 5, cor: cfg.corLuzPadrao, falloff: cfg.falloffPadrao } })
             .build();
-
-          await OBR.scene.items.addItems([itemLuz]);
-          await OBR.player.select([itemLuz.id]);
-          await OBR.notification.show("Fonte de [Luz] criada!", "SUCCESS");
+          await OBR.scene.items.addItems([nova]);
+          await OBR.player.select([nova.id]);
         }
       });
 
-      // MODO 3: Borracha de Paredes
       await OBR.tool.createMode({
         id: idModoBorracha,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "3. Borracha de Parede",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
-          }
-        ],
+        icons: [{ icon: "https://gaduarte14.github.io/nevoa/icon.svg", label: "3. Borracha de Parede", filter: { activeTools: [idFerramenta], roles: ["GM"] } }],
         cursors: [{ cursor: "pointer" }],
-        async onToolClick(_, event) {
-          const dpi = await OBR.scene.grid.getDpi();
-          const paredes = await obterParedesCena();
-          let idx = -1;
-          let menD = Math.max(28, dpi * 0.22);
-          for (let i = 0; i < paredes.length; i++) {
-            const p = paredes[i];
-            const proj = projetarPontoNoSegmento(
-              event.pointerPosition,
-              { x: p.x1, y: p.y1 },
-              { x: p.x2, y: p.y2 }
-            );
-            if (proj.dist <= menD) {
-              menD = proj.dist;
-              idx = i;
-            }
-          }
+        async onToolClick(_, ev) {
+          const paredes = await obterParedes();
+          let idx = -1, men = 35;
+          paredes.forEach((p, i) => {
+            const d = projetarNoSeg(ev.pointerPosition, { x: p.x1, y: p.y1 }, { x: p.x2, y: p.y2 }).dist;
+            if (d <= men) { men = d; idx = i; }
+          });
           if (idx !== -1) {
-            const novas = paredes.filter((_, i) => i !== idx);
-            await OBR.scene.setMetadata({
-              [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas }
-            });
+            await OBR.scene.setMetadata({ [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: paredes.filter((_, i) => i !== idx) } });
           }
         }
       });
 
-      // Escuta mudanças na cena para recalcular visibilidade, luz e névoa em tempo real
-      if (await OBR.scene.isReady()) await recalcularTudoNaCena();
-
-      OBR.scene.onReadyChange(async (ok) => {
-        if (ok) await recalcularTudoNaCena();
-      });
-
-      OBR.scene.onMetadataChange(async () => {
-        await atualizarPreviaTracosLocais();
-        await recalcularTudoNaCena();
-      });
-
-      OBR.player.onChange(async () => {
-        await recalcularTudoNaCena();
-      });
-
-      OBR.scene.items.onChange(async (itens) => {
-        const cfg = await obterConfigCena();
-        const role = await OBR.player.getRole();
-
-        if (role === "GM" && cfg.bloquearMovimentoTokens) {
-          const paredes = await obterParedesCena();
-          if (paredes.length > 0) {
-            const tokens = itens.filter((i) => i.layer === "CHARACTER");
-            const voltar = [];
-            for (const tk of tokens) {
-              const ant = ultimasPosicoesTokens.get(tk.id);
-              if (ant && (ant.x !== tk.position.x || ant.y !== tk.position.y)) {
-                const cruzou = paredes.some(
-                  (p) =>
-                    !p.aberta &&
-                    segmentosSeCruzam(
-                      ant,
-                      tk.position,
-                      { x: p.x1, y: p.y1 },
-                      { x: p.x2, y: p.y2 }
-                    )
-                );
-                if (cruzou) {
-                  voltar.push({ id: tk.id, pos: ant });
-                  continue;
-                }
-              }
-              ultimasPosicoesTokens.set(tk.id, { x: tk.position.x, y: tk.position.y });
-            }
-            if (voltar.length > 0) {
-              await OBR.scene.items.updateItems(
-                voltar.map((v) => v.id),
-                (lista) => {
-                  for (const it of lista) {
-                    const v = voltar.find((x) => x.id === it.id);
-                    if (v) it.position = v.pos;
-                  }
-                }
-              );
-              return;
-            }
-          }
-        }
-
-        await recalcularTudoNaCena();
-      });
+      if (await OBR.scene.isReady()) await recalcularCena();
+      OBR.scene.onReadyChange((ok) => { if (ok) recalcularCena(); });
+      OBR.scene.onMetadataChange(() => { atualizarPreviaVerde(); recalcularCena(); });
+      OBR.scene.items.onChange(() => recalcularCena());
     });
   </script>
 </body>
