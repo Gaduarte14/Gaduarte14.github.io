@@ -22,7 +22,7 @@
       margin-bottom: 10px;
     }
     .tab-btn {
-      min-height: 40px;
+      min-height: 38px;
       border-radius: 8px;
       border: 1px solid #334155;
       background: #1e2436;
@@ -59,7 +59,7 @@
       margin-bottom: 6px;
     }
     button {
-      min-height: 40px;
+      min-height: 42px;
       padding: 6px 10px;
       border-radius: 8px;
       border: 1px solid #3b4256;
@@ -71,11 +71,11 @@
     }
     button:hover:not(:disabled) { filter: brightness(1.15); }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-verde {
+    .btn-concluir {
       grid-column: span 2;
       background: #16a34a;
       border-color: #22c55e;
-      font-size: 13px;
+      font-size: 14px;
     }
     .btn-perigo {
       background: #7f1d1d;
@@ -89,53 +89,50 @@
       gap: 8px;
     }
     .row label { flex: 1; color: #cbd5e1; }
-    input[type="range"] { width: 110px; }
+    input[type="range"] { width: 115px; }
     input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
-    input[type="color"] { width: 40px; height: 26px; border: none; background: none; cursor: pointer; }
+    input[type="color"] { width: 42px; height: 28px; border: none; background: none; cursor: pointer; }
     select, input[type="number"] {
       background: #0f172a;
       color: #f8fafc;
       border: 1px solid #334155;
       border-radius: 6px;
-      padding: 4px 6px;
+      padding: 5px 8px;
     }
     .hint { font-size: 11px; color: #94a3b8; line-height: 1.35; }
   </style>
 </head>
 <body>
+  <!-- Navegação entre as 3 funções -->
   <div class="tabs">
-    <button type="button" class="tab-btn active" data-tab="tab-paredes">1. Paredes</button>
-    <button type="button" class="tab-btn" data-tab="tab-luz">2. Luz Falloff</button>
-    <button type="button" class="tab-btn" data-tab="tab-nevoa">3. Névoa</button>
+    <button class="tab-btn active" data-tab="tab-paredes">1. Paredes</button>
+    <button class="tab-btn" data-tab="tab-luz">2. Luz Falloff</button>
+    <button class="tab-btn" data-tab="tab-nevoa">3. Névoa</button>
   </div>
 
-  <!-- ABA 1: PAREDES -->
+  <!-- ABA 1: PAREDE COM LÁPIS -->
   <div id="tab-paredes" class="tab-pane active">
     <div class="card">
       <div class="card-title">
-        <span>Riscos: <b id="lblTracos">0</b></span>
-        <span>Paredes Salvas: <b id="lblParedes">0</b></span>
+        <span>Traços Riscados: <b id="lblTracos">0</b></span>
+        <span>Salvas: <b id="lblParedes">0</b></span>
       </div>
       <div class="btn-grid">
-        <button type="button" id="btnConcluir" class="btn-verde" disabled>
+        <button id="btnConcluir" class="btn-concluir" disabled>
           ✓ Concluir e Organizar Parede
         </button>
-        <button type="button" id="btnDesfazerTraco" disabled>↩ Desfazer Risco</button>
-        <button type="button" id="btnCancelar" class="btn-perigo" disabled>✕ Cancelar</button>
-      </div>
-      <div class="row" style="margin-top: 6px;">
-        <label><b>Concluir automático ao soltar o mouse</b></label>
-        <input type="checkbox" id="chkAutoConcluir" />
+        <button id="btnDesfazerTraco" disabled>↩ Desfazer Traço</button>
+        <button id="btnCancelar" class="btn-perigo" disabled>✕ Cancelar</button>
       </div>
       <div class="hint">
-        Dica: Feche este painel para riscar no mapa com a ferramenta de sol (na direita), ou marque "Concluir automático".
+        Risque no mapa arrastando o mouse (ou clique no Ponto 1 e depois no Ponto 2). Depois clique em <b>Concluir</b>.
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Organização do Traço</div>
+      <div class="card-title">Ajustes do Traço (Tempo Real)</div>
       <div class="row">
-        <label>Modo Linha Reta</label>
+        <label>Modo Linha Reta ao arrastar</label>
         <input type="checkbox" id="chkLinhaReta" />
       </div>
       <div class="row">
@@ -147,7 +144,7 @@
         <input type="range" id="rngAngulo" min="0" max="20" value="8" />
       </div>
       <div class="row">
-        <label>Aceitar Diagonais 45°</label>
+        <label>Aceitar Diagonais de 45°</label>
         <input type="checkbox" id="chkDiag45" checked />
       </div>
       <div class="row">
@@ -162,19 +159,22 @@
         <label>Mostrar paredes laranjas (Mestre)</label>
         <input type="checkbox" id="chkMostrarParedes" checked />
       </div>
-      <div class="btn-grid" style="margin-top: 6px;">
-        <button type="button" id="btnRemoverUltimaParede">⟲ Desfazer Parede</button>
-        <button type="button" id="btnApagarParedes" class="btn-perigo">Apagar Todas</button>
+      <div class="row">
+        <label>Bloquear movimento de tokens</label>
+        <input type="checkbox" id="chkBloquearTokens" checked />
       </div>
+      <button id="btnApagarParedes" class="btn-perigo" style="width: 100%; margin-top: 4px;">
+        Apagar Todas as Paredes
+      </button>
     </div>
   </div>
 
-  <!-- ABA 2: LUZ COM FALLOFF + FERRAMENTA [LUZ] -->
+  <!-- ABA 2: LUZ COM FALLOFF E FERRAMENTA [LUZ] -->
   <div id="tab-luz" class="tab-pane">
     <div class="card">
-      <div class="card-title">Criar Fonte de [Luz] Solta</div>
-      <button type="button" id="btnCriarLuz" class="btn-verde" style="width: 100%; margin-bottom: 8px;">
-        + Criar Fonte de [Luz] Agora
+      <div class="card-title">Ferramenta [Luz] (Luzes Soltas)</div>
+      <button id="btnCriarLuzCentro" class="btn-concluir" style="width: 100%; margin-bottom: 8px;">
+        + Criar Fonte de [Luz] no Mapa
       </button>
       <div class="row">
         <label>Cor Padrão da Luz</label>
@@ -186,10 +186,11 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title" id="tituloSel">Item Selecionado no Mapa</div>
-      <div id="boxSel" class="hint">
-        Selecione qualquer <b>Token</b> ou <b>[Luz]</b> no mapa para ligar Luz/Visão e mudar o raio.
+    <!-- Aparece quando o Mestre seleciona uma Luz Solta ou um Token no mapa -->
+    <div class="card" id="cardItemSelecionado">
+      <div class="card-title" id="tituloSelecionado">Selecione um Token ou [Luz] no mapa</div>
+      <div id="conteudoSelecionado" class="hint">
+        Clique em um Token de jogador ou em uma fonte de [Luz] no mapa para configurar o raio de Luz e Visão.
       </div>
     </div>
   </div>
@@ -197,42 +198,55 @@
   <!-- ABA 3: MEMÓRIA DE NÉVOA (3 ESTADOS) -->
   <div id="tab-nevoa" class="tab-pane">
     <div class="card">
-      <div class="card-title">Névoa de 3 Estados</div>
+      <div class="card-title">Névoa de 3 Estados + Memória</div>
       <div class="row">
-        <label><b>Ativar Névoa na Cena</b></label>
+        <label><b>Ativar Névoa e Memória na Cena</b></label>
         <input type="checkbox" id="chkNevoaAtiva" checked />
+      </div>
+      <div class="row">
+        <label>Cor da "Névoa de Hoje" (Explorado)</label>
+        <input type="color" id="corNevoaExplorada" value="#181822" />
+      </div>
+      <div class="row">
+        <label>Opacidade Explorado: <b id="valOpNevoa">74</b>%</label>
+        <input type="range" id="rngOpNevoa" min="20" max="95" value="74" />
       </div>
       <div class="row">
         <label>Visão do Mestre:</label>
         <select id="selVisaoMestre">
           <option value="TUDO">Mestre (Semi-transparente)</option>
-          <option value="PLAYERS">Como Jogador (Escuro 100%)</option>
+          <option value="PLAYERS">Ver como Players (100%)</option>
         </select>
-      </div>
-      <div class="row">
-        <label>Cor da "Névoa de Hoje" (Explorado)</label>
-        <input type="color" id="corNevoa" value="#181822" />
-      </div>
-      <div class="row">
-        <label>Opacidade Explorado: <b id="valOpNevoa">75</b>%</label>
-        <input type="range" id="rngOpNevoa" min="20" max="95" value="75" />
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Memória dos Tokens</div>
+      <div class="card-title">Controle da Memória dos Tokens</div>
       <div class="btn-grid">
-        <button type="button" id="btnLimparMemToken">Limpar Token Sel.</button>
-        <button type="button" id="btnLimparMemTudo" class="btn-perigo">Limpar Tudo</button>
+        <button id="btnLimparMemToken">Limpar Token Selecionado</button>
+        <button id="btnLimparMemTudo" class="btn-perigo">Limpar Toda a Memória</button>
       </div>
-      <button type="button" id="btnRevelarTudo" style="width: 100%;">
-        Revelar Mapa Inteiro (Explorado)
-      </button>
+      <div class="hint">
+        • <b>Nunca explorado:</b> Escuridão total (preto)<br/>
+        • <b>Já explorado (sem luz agora):</b> Névoa de hoje<br/>
+        • <b>Iluminado/visto agora:</b> Claro com falloff suave
+      </div>
     </div>
   </div>
 
+  <!-- Abas: script comum, funciona mesmo se o SDK falhar ao carregar -->
+  <script>
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn, .tab-pane").forEach((el) => el.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      });
+    });
+  </script>
+
   <script type="module">
-    import OBR, { buildShape } from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
+    import OBR, { buildShape } from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
 
     const ID_EXT = "com.gaduarte14.nevoa3em1";
     const CHAVE_PAREDES = `${ID_EXT}/paredes`;
@@ -243,222 +257,100 @@
     const CHAVE_TOKEN_MEM = `${ID_EXT}/memoria`;
     const PREFIXO_PREVIA = `${ID_EXT}_previa_`;
 
-    // 1. Troca de abas imediata (funciona mesmo antes do OBR carregar)
-    document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn, .tab-pane").forEach((el) => el.classList.remove("active"));
-        btn.classList.add("active");
-        document.getElementById(btn.dataset.tab).classList.add("active");
-      });
-    });
+    // Elementos da UI
+    const lblTracos = document.getElementById("lblTracos");
+    const lblParedes = document.getElementById("lblParedes");
+    const btnConcluir = document.getElementById("btnConcluir");
+    const btnDesfazerTraco = document.getElementById("btnDesfazerTraco");
+    const btnCancelar = document.getElementById("btnCancelar");
+    const btnApagarParedes = document.getElementById("btnApagarParedes");
 
-    const el = (id) => document.getElementById(id);
+    const chkLinhaReta = document.getElementById("chkLinhaReta");
+    const rngRDP = document.getElementById("rngRDP");
+    const valRDP = document.getElementById("valRDP");
+    const rngAngulo = document.getElementById("rngAngulo");
+    const valAngulo = document.getElementById("valAngulo");
+    const chkDiag45 = document.getElementById("chkDiag45");
+    const chkGrid = document.getElementById("chkGrid");
+    const rngSnap = document.getElementById("rngSnap");
+    const valSnap = document.getElementById("valSnap");
+    const chkMostrarParedes = document.getElementById("chkMostrarParedes");
+    const chkBloquearTokens = document.getElementById("chkBloquearTokens");
 
-    async function salvarConfig(novos) {
-      if (!(await OBR.scene.isReady())) return;
+    const btnCriarLuzCentro = document.getElementById("btnCriarLuzCentro");
+    const corLuzPadrao = document.getElementById("corLuzPadrao");
+    const rngFalloff = document.getElementById("rngFalloff");
+    const valFalloff = document.getElementById("valFalloff");
+    const tituloSelecionado = document.getElementById("tituloSelecionado");
+    const conteudoSelecionado = document.getElementById("conteudoSelecionado");
+
+    const chkNevoaAtiva = document.getElementById("chkNevoaAtiva");
+    const corNevoaExplorada = document.getElementById("corNevoaExplorada");
+    const rngOpNevoa = document.getElementById("rngOpNevoa");
+    const valOpNevoa = document.getElementById("valOpNevoa");
+    const selVisaoMestre = document.getElementById("selVisaoMestre");
+    const btnLimparMemToken = document.getElementById("btnLimparMemToken");
+    const btnLimparMemTudo = document.getElementById("btnLimparMemTudo");
+
+    let cadeiaCfg = Promise.resolve();
+    const salvarConfig = (p) => (cadeiaCfg = cadeiaCfg.then(() => _salvarConfig(p)).catch(console.error));
+    async function _salvarConfig(parcial) {
       const meta = await OBR.scene.getMetadata();
       const atual = meta[CHAVE_CONFIG] || {};
       await OBR.scene.setMetadata({
-        [CHAVE_CONFIG]: { ...atual, ...novos, _ts: Date.now() }
+        [CHAVE_CONFIG]: { ...atual, ...parcial }
       });
     }
 
-    async function atualizarPainel() {
+    // Lê direto do Owlbear quantos traços provisórios e paredes existem
+    async function sincronizarPainel() {
       if (!(await OBR.scene.isReady())) return;
+      if (document.activeElement?.matches?.("input[type=range]")) return; // não mexe no slider enquanto arrasta
       const meta = await OBR.scene.getMetadata();
       const cfg = meta[CHAVE_CONFIG] || {};
       const paredes = meta[CHAVE_PAREDES]?.segmentos || [];
       const locais = await OBR.scene.local.getItems();
       const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
 
-      el("lblTracos").textContent = brutos.length;
-      el("lblParedes").textContent = paredes.length;
-      el("btnConcluir").disabled = brutos.length === 0;
-      el("btnDesfazerTraco").disabled = brutos.length === 0;
-      el("btnCancelar").disabled = brutos.length === 0;
+      lblTracos.textContent = brutos.length;
+      lblParedes.textContent = paredes.length;
 
-      el("chkAutoConcluir").checked = Boolean(cfg.autoConcluir);
-      el("chkLinhaReta").checked = Boolean(cfg.modoLinhaReta);
-      el("rngRDP").value = cfg.toleranciaRDP ?? 12;
-      el("valRDP").textContent = el("rngRDP").value;
-      el("rngAngulo").value = cfg.toleranciaAnguloGraus ?? 8;
-      el("valAngulo").textContent = el("rngAngulo").value;
-      el("chkDiag45").checked = cfg.aceitarDiagonais45 !== false;
-      el("chkGrid").checked = Boolean(cfg.alinharAoGrid);
-      el("rngSnap").value = cfg.raioSnap ?? 25;
-      el("valSnap").textContent = el("rngSnap").value;
-      el("chkMostrarParedes").checked = cfg.mostrarParedesMestre !== false;
+      const temBrutos = brutos.length > 0;
+      btnConcluir.disabled = !temBrutos;
+      btnDesfazerTraco.disabled = !temBrutos;
+      btnCancelar.disabled = !temBrutos;
 
-      el("corLuzPadrao").value = cfg.corLuzPadrao || "#ffe8b6";
-      el("rngFalloff").value = cfg.falloffPadrao ?? 0.5;
-      el("valFalloff").textContent = Number(el("rngFalloff").value).toFixed(2);
+      chkLinhaReta.checked = Boolean(cfg.modoLinhaReta);
+      rngRDP.value = cfg.toleranciaRDP ?? 12;
+      valRDP.textContent = rngRDP.value;
+      rngAngulo.value = cfg.toleranciaAnguloGraus ?? 8;
+      valAngulo.textContent = rngAngulo.value;
+      chkDiag45.checked = cfg.aceitarDiagonais45 !== false;
+      chkGrid.checked = Boolean(cfg.alinharAoGrid);
+      rngSnap.value = cfg.raioSnap ?? 25;
+      valSnap.textContent = rngSnap.value;
+      chkMostrarParedes.checked = cfg.mostrarParedesMestre !== false;
+      chkBloquearTokens.checked = cfg.bloquearMovimentoTokens !== false;
 
-      el("chkNevoaAtiva").checked = cfg.nevoaAtiva !== false;
-      el("selVisaoMestre").value = cfg.modoVisaoMestre || "TUDO";
-      el("corNevoa").value = cfg.corNevoaExplorada || "#181822";
-      el("rngOpNevoa").value = Math.round((cfg.opacidadeNevoaExplorada ?? 0.75) * 100);
-      el("valOpNevoa").textContent = el("rngOpNevoa").value;
+      corLuzPadrao.value = cfg.corLuzPadrao || "#ffe8b6";
+      rngFalloff.value = cfg.falloffPadrao ?? 0.5;
+      valFalloff.textContent = Number(rngFalloff.value).toFixed(2);
 
-      await renderizarControlesSelecao();
+      chkNevoaAtiva.checked = cfg.nevoaAtiva !== false;
+      corNevoaExplorada.value = cfg.corNevoaExplorada || "#181822";
+      rngOpNevoa.value = Math.round((cfg.opacidadeNevoaExplorada ?? 0.74) * 100);
+      valOpNevoa.textContent = rngOpNevoa.value;
+      selVisaoMestre.value = cfg.modoVisaoMestre || "TUDO";
+
+      await atualizarCardSelecao();
     }
 
-    async function renderizarControlesSelecao() {
-      const sel = (await OBR.player.getSelection()) || [];
-      const box = el("boxSel");
-      const tit = el("tituloSel");
-      if (sel.length === 0) {
-        tit.textContent = "Nenhum Item Selecionado";
-        box.innerHTML = "Clique em um <b>Token</b> ou <b>[Luz]</b> no mapa para configurar Luz e Visão.";
-        return;
-      }
-      const itens = await OBR.scene.items.getItems(sel);
-      const item = itens[0];
-      if (!item) return;
-
-      // Caso 1: É uma Fonte de [Luz] Solta
-      if (item.metadata?.[CHAVE_LUZ_SOLTA]) {
-        const l = item.metadata[CHAVE_LUZ_SOLTA];
-        tit.textContent = "Fonte de [Luz] Selecionada";
-        box.innerHTML = `
-          <div class="row">
-            <label>Luz Ligada</label>
-            <input type="checkbox" id="selLuzAtiva" ${l.ativa ? "checked" : ""} />
-          </div>
-          <div class="row">
-            <label>Raio (células):</label>
-            <div>
-              <button type="button" id="btnRaioMenos" style="min-height:30px;padding:4px 10px;">-</button>
-              <input type="number" id="numRaioLuz" value="${l.raioCelulas || 4}" min="0.5" max="30" step="0.5" style="width:55px;" />
-              <button type="button" id="btnRaioMais" style="min-height:30px;padding:4px 10px;">+</button>
-            </div>
-          </div>
-          <div class="row">
-            <label>Cor:</label>
-            <input type="color" id="selCorLuz" value="${l.cor || "#ffe8b6"}" />
-          </div>
-          <div class="row">
-            <label>Falloff: <b id="lblSelFalloff">${Number(l.falloff ?? 0.5).toFixed(2)}</b></label>
-            <input type="range" id="selFalloffLuz" min="0" max="1" step="0.05" value="${l.falloff ?? 0.5}" />
-          </div>
-          <button type="button" id="btnApagarLuz" class="btn-perigo" style="width:100%;margin-top:4px;">Apagar Esta [Luz]</button>
-        `;
-
-        const salvarLuz = async (parcial) => {
-          await OBR.scene.items.updateItems([item.id], (lista) => {
-            for (const it of lista) {
-              it.metadata[CHAVE_LUZ_SOLTA] = { ...it.metadata[CHAVE_LUZ_SOLTA], ...parcial };
-            }
-          });
-          await atualizarPainel();
-        };
-
-        el("selLuzAtiva").onchange = (e) => salvarLuz({ ativa: e.target.checked });
-        el("btnRaioMenos").onclick = () => salvarLuz({ raioCelulas: Math.max(0.5, (l.raioCelulas || 4) - 1) });
-        el("btnRaioMais").onclick = () => salvarLuz({ raioCelulas: Math.min(30, (l.raioCelulas || 4) + 1) });
-        el("numRaioLuz").onchange = (e) => salvarLuz({ raioCelulas: Math.max(0.5, Number(e.target.value)) });
-        el("selCorLuz").oninput = (e) => salvarLuz({ cor: e.target.value });
-        el("selFalloffLuz").oninput = (e) => {
-          el("lblSelFalloff").textContent = Number(e.target.value).toFixed(2);
-          salvarLuz({ falloff: Number(e.target.value) });
-        };
-        el("btnApagarLuz").onclick = async () => {
-          await OBR.scene.items.deleteItems([item.id]);
-          await atualizarPainel();
-        };
-        return;
-      }
-
-      // Caso 2: É um Token no mapa
-      const t = item.metadata?.[CHAVE_TOKEN_CFG] || {
-        luzAtiva: false,
-        raioLuz: 4,
-        corLuz: "#ffe8b6",
-        falloffLuz: 0.5,
-        visaoAtiva: false,
-        raioVisao: 6
-      };
-      tit.textContent = `Token: ${item.text?.plainText || item.name || "Personagem"}`;
-      box.innerHTML = `
-        <div class="row">
-          <label><b>[Luz] no Token</b></label>
-          <input type="checkbox" id="tkLuzAtiva" ${t.luzAtiva ? "checked" : ""} />
-        </div>
-        <div class="row">
-          <label>Raio da Luz (células)</label>
-          <input type="number" id="tkRaioLuz" value="${t.raioLuz ?? 4}" min="0.5" max="30" step="0.5" style="width:65px;" />
-        </div>
-        <div class="row">
-          <label><b>[Visão] no Token (Grava Memória)</b></label>
-          <input type="checkbox" id="tkVisaoAtiva" ${t.visaoAtiva ? "checked" : ""} />
-        </div>
-        <div class="row">
-          <label>Raio da Visão (células)</label>
-          <input type="number" id="tkRaioVisao" value="${t.raioVisao ?? 6}" min="0.5" max="30" step="0.5" style="width:65px;" />
-        </div>
-      `;
-
-      const salvarTk = async (parcial) => {
-        await OBR.scene.items.updateItems([item.id], (lista) => {
-          for (const it of lista) {
-            it.metadata[CHAVE_TOKEN_CFG] = { ...t, ...(it.metadata[CHAVE_TOKEN_CFG] || {}), ...parcial };
-          }
-        });
-        await atualizarPainel();
-      };
-
-      el("tkLuzAtiva").onchange = (e) => salvarTk({ luzAtiva: e.target.checked });
-      el("tkRaioLuz").onchange = (e) => salvarTk({ raioLuz: Number(e.target.value) });
-      el("tkVisaoAtiva").onchange = (e) => salvarTk({ visaoAtiva: e.target.checked });
-      el("tkRaioVisao").onchange = (e) => salvarTk({ raioVisao: Number(e.target.value) });
-    }
-
-    // Eventos dos controles
-    [
-      "chkAutoConcluir",
-      "chkLinhaReta",
-      "rngRDP",
-      "rngAngulo",
-      "chkDiag45",
-      "chkGrid",
-      "rngSnap",
-      "chkMostrarParedes",
-      "corLuzPadrao",
-      "rngFalloff",
-      "chkNevoaAtiva",
-      "selVisaoMestre",
-      "corNevoa",
-      "rngOpNevoa"
-    ].forEach((id) => {
-      el(id).addEventListener("input", () => {
-        el("valRDP").textContent = el("rngRDP").value;
-        el("valAngulo").textContent = el("rngAngulo").value;
-        el("valSnap").textContent = el("rngSnap").value;
-        el("valFalloff").textContent = Number(el("rngFalloff").value).toFixed(2);
-        el("valOpNevoa").textContent = el("rngOpNevoa").value;
-
-        salvarConfig({
-          autoConcluir: el("chkAutoConcluir").checked,
-          modoLinhaReta: el("chkLinhaReta").checked,
-          toleranciaRDP: Number(el("rngRDP").value),
-          toleranciaAnguloGraus: Number(el("rngAngulo").value),
-          aceitarDiagonais45: el("chkDiag45").checked,
-          alinharAoGrid: el("chkGrid").checked,
-          raioSnap: Number(el("rngSnap").value),
-          mostrarParedesMestre: el("chkMostrarParedes").checked,
-          corLuzPadrao: el("corLuzPadrao").value,
-          falloffPadrao: Number(el("rngFalloff").value),
-          nevoaAtiva: el("chkNevoaAtiva").checked,
-          modoVisaoMestre: el("selVisaoMestre").value,
-          corNevoaExplorada: el("corNevoa").value,
-          opacidadeNevoaExplorada: Number(el("rngOpNevoa").value) / 100
-        });
-      });
-    });
-
-    el("btnConcluir").onclick = async () => {
+    // Concluir paredes: converte as prévias verdes em paredes definitivas da cena!
+    btnConcluir.addEventListener("click", async () => {
       const locais = await OBR.scene.local.getItems();
       const previas = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA));
       const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
+
       const meta = await OBR.scene.getMetadata();
       const atuais = meta[CHAVE_PAREDES]?.segmentos || [];
       const novas = [...atuais];
@@ -476,99 +368,180 @@
           });
         }
       }
-      await OBR.scene.local.deleteItems([...previas.map((i) => i.id), ...brutos.map((i) => i.id)]);
-      await OBR.scene.setMetadata({ [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas } });
-      await atualizarPainel();
-    };
 
-    el("btnDesfazerTraco").onclick = async () => {
+      await OBR.scene.local.deleteItems([...previas.map((i) => i.id), ...brutos.map((i) => i.id)]);
+      await OBR.scene.setMetadata({
+        [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas }
+      });
+      await OBR.notification.show(`${previas.length} parede(s) concluída(s)!`, "SUCCESS");
+      await sincronizarPainel();
+    });
+
+    btnDesfazerTraco.addEventListener("click", async () => {
       const locais = await OBR.scene.local.getItems();
       const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
       if (brutos.length > 0) {
         await OBR.scene.local.deleteItems([brutos[brutos.length - 1].id]);
-        await salvarConfig({});
-        await atualizarPainel();
+        await salvarConfig({ _at: Date.now() });
+        await sincronizarPainel();
       }
-    };
+    });
 
-    el("btnCancelar").onclick = async () => {
+    btnCancelar.addEventListener("click", async () => {
       const locais = await OBR.scene.local.getItems();
       const ids = locais
         .filter((i) => i.id.startsWith(PREFIXO_PREVIA) || Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]))
         .map((i) => i.id);
-      if (ids.length > 0) await OBR.scene.local.deleteItems(ids);
-      await atualizarPainel();
-    };
+      if (ids.length) await OBR.scene.local.deleteItems(ids);
+      await sincronizarPainel();
+    });
 
-    el("btnRemoverUltimaParede").onclick = async () => {
-      const meta = await OBR.scene.getMetadata();
-      const segs = meta[CHAVE_PAREDES]?.segmentos || [];
-      if (segs.length > 0) {
-        segs.pop();
-        await OBR.scene.setMetadata({ [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: segs } });
-        await atualizarPainel();
-      }
-    };
-
-    el("btnApagarParedes").onclick = async () => {
+    btnApagarParedes.addEventListener("click", async () => {
       await OBR.scene.setMetadata({ [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: [] } });
-      await atualizarPainel();
-    };
+      await OBR.notification.show("Todas as paredes foram apagadas.", "WARNING");
+    });
 
-    el("btnCriarLuz").onclick = async () => {
-      const itens = await OBR.scene.items.getItems((i) => i.layer === "MAP");
-      const pos = itens[0]?.position || { x: 0, y: 0 };
-      const nova = buildShape()
+    // Ajustes -> gravam na config da cena (o background reage sozinho)
+    const num = (e) => Number(e.value);
+    const marc = (e) => e.checked;
+    const txt = (e) => e.value;
+    function ligar(el, chave, conv, evento = "input") {
+      el.addEventListener(evento, () => {
+        const v = conv(el);
+        if (el.type === "range") {
+          const lbl = el.parentElement.querySelector("b");
+          if (lbl) lbl.textContent = el.step ? Number(v).toFixed(2) : v;
+        }
+        salvarConfig({ [chave]: v });
+      });
+    }
+    ligar(chkLinhaReta, "modoLinhaReta", marc, "change");
+    ligar(rngRDP, "toleranciaRDP", num);
+    ligar(rngAngulo, "toleranciaAnguloGraus", num);
+    ligar(chkDiag45, "aceitarDiagonais45", marc, "change");
+    ligar(chkGrid, "alinharAoGrid", marc, "change");
+    ligar(rngSnap, "raioSnap", num);
+    ligar(chkMostrarParedes, "mostrarParedesMestre", marc, "change");
+    ligar(chkBloquearTokens, "bloquearMovimentoTokens", marc, "change");
+    ligar(corLuzPadrao, "corLuzPadrao", txt, "change");
+    ligar(rngFalloff, "falloffPadrao", num);
+    ligar(chkNevoaAtiva, "nevoaAtiva", marc, "change");
+    ligar(corNevoaExplorada, "corNevoaExplorada", txt, "change");
+    ligar(rngOpNevoa, "opacidadeNevoaExplorada", (e) => Number(e.value) / 100);
+    ligar(selVisaoMestre, "modoVisaoMestre", txt, "change");
+
+    // Criar [Luz] no centro da tela
+    btnCriarLuzCentro.addEventListener("click", async () => {
+      const cfg = (await OBR.scene.getMetadata())[CHAVE_CONFIG] || {};
+      const w = await OBR.viewport.getWidth();
+      const h = await OBR.viewport.getHeight();
+      const pos = await OBR.viewport.inverseTransformPoint({ x: w / 2, y: h / 2 });
+      const luz = buildShape()
         .name("Fonte de Luz [Luz]")
         .shapeType("CIRCLE")
-        .width(45)
-        .height(45)
-        .position({ x: pos.x + 300, y: pos.y + 300 })
-        .fillOpacity(0)
+        .width(42)
+        .height(42)
+        .position(pos)
+        .fillColor("#fde047")
+        .fillOpacity(0.6)
         .strokeOpacity(0)
+        .visible(false)
         .layer("PROP")
         .metadata({
           [CHAVE_LUZ_SOLTA]: {
             ativa: true,
-            raioCelulas: 5,
-            cor: el("corLuzPadrao").value,
-            falloff: Number(el("rngFalloff").value)
+            raioCelulas: 4,
+            cor: cfg.corLuzPadrao || "#ffe8b6",
+            falloff: cfg.falloffPadrao ?? 0.5
           }
         })
         .build();
-      await OBR.scene.items.addItems([nova]);
-      await OBR.player.select([nova.id]);
-      await atualizarPainel();
-    };
+      await OBR.scene.items.addItems([luz]);
+      await OBR.player.select([luz.id]);
+    });
 
-    el("btnLimparMemToken").onclick = async () => {
+    // Card do item selecionado (luz solta ou token)
+    let chaveCard = "";
+    const corOk = (c, pad) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : pad);
+    async function atualizarCardSelecao() {
       const sel = (await OBR.player.getSelection()) || [];
-      if (sel.length > 0) {
-        await OBR.scene.items.updateItems(sel, (lista) => {
-          for (const it of lista) delete it.metadata[CHAVE_TOKEN_MEM];
-        });
-      }
-    };
+      const item = sel.length ? (await OBR.scene.items.getItems([sel[0]]))[0] : null;
+      const luz = item?.metadata?.[CHAVE_LUZ_SOLTA];
+      const tk = item && !luz && item.layer === "CHARACTER" ? item.metadata?.[CHAVE_TOKEN_CFG] || {} : null;
+      const chave = JSON.stringify([item?.id, luz, tk]);
+      if (chave === chaveCard) return;
+      chaveCard = chave;
 
-    el("btnLimparMemTudo").onclick = async () => {
+      if (!luz && !tk) {
+        tituloSelecionado.textContent = "Selecione um Token ou [Luz] no mapa";
+        conteudoSelecionado.innerHTML = "Clique em um Token de jogador ou em uma fonte de [Luz] no mapa para configurar.";
+        return;
+      }
+      const alvo = luz ? CHAVE_LUZ_SOLTA : CHAVE_TOKEN_CFG;
+      const campos = luz
+        ? [
+            ["ativa", "checkbox", "Ligada", luz.ativa !== false],
+            ["raioCelulas", "number", "Raio (células)", luz.raioCelulas ?? 4],
+            ["falloff", "range", "Falloff", luz.falloff ?? 0.5],
+            ["cor", "color", "Cor", corOk(luz.cor, "#ffe8b6")]
+          ]
+        : [
+            ["luzAtiva", "checkbox", "Luz ativa", Boolean(tk.luzAtiva)],
+            ["raioLuz", "number", "Raio da Luz (células)", tk.raioLuz ?? 4],
+            ["visaoAtiva", "checkbox", "Visão ativa", Boolean(tk.visaoAtiva)],
+            ["raioVisao", "number", "Raio da Visão (células)", tk.raioVisao ?? 6]
+          ];
+      tituloSelecionado.textContent = luz ? "Fonte de [Luz] selecionada" : `Token: ${item.name || "sem nome"}`;
+      conteudoSelecionado.innerHTML =
+        campos
+          .map(([k, t, l, v]) => {
+            const extra = t === "number" ? 'min="0.5" step="0.5" style="width:70px"' : t === "range" ? 'min="0" max="1" step="0.05"' : "";
+            const val = t === "checkbox" ? (v ? "checked" : "") : `value="${Number.isFinite(v) || typeof v === "string" ? v : 0}"`;
+            return `<div class="row"><label>${l}</label><input data-k="${k}" data-alvo="${alvo}" type="${t}" ${extra} ${val}></div>`;
+          })
+          .join("") +
+        (luz ? '<button data-apagar class="btn-perigo" style="width:100%">Apagar esta [Luz]</button>' : "");
+    }
+
+    conteudoSelecionado.addEventListener("change", async (e) => {
+      const el = e.target;
+      const k = el.dataset?.k;
+      if (!k) return;
+      const sel = (await OBR.player.getSelection()) || [];
+      if (!sel.length) return;
+      const v = el.type === "checkbox" ? el.checked : el.type === "color" ? el.value : Number(el.value);
+      await OBR.scene.items.updateItems([sel[0]], (itens) => {
+        for (const it of itens) it.metadata[el.dataset.alvo] = { ...(it.metadata[el.dataset.alvo] || {}), [k]: v };
+      });
+    });
+    conteudoSelecionado.addEventListener("click", async (e) => {
+      if (!e.target.matches("[data-apagar]")) return;
+      const sel = (await OBR.player.getSelection()) || [];
+      if (sel.length) await OBR.scene.items.deleteItems([sel[0]]);
+    });
+
+    // Limpar memória da névoa
+    async function limparMemoria(ids) {
+      if (!ids.length) return;
+      await OBR.scene.items.updateItems(ids, (itens) => {
+        for (const it of itens) delete it.metadata[CHAVE_TOKEN_MEM];
+      });
+      await OBR.notification.show("Memória limpa.", "SUCCESS");
+    }
+    btnLimparMemToken.addEventListener("click", async () => limparMemoria((await OBR.player.getSelection()) || []));
+    btnLimparMemTudo.addEventListener("click", async () => {
       const todos = await OBR.scene.items.getItems((i) => Boolean(i.metadata?.[CHAVE_TOKEN_MEM]));
-      if (todos.length > 0) {
-        await OBR.scene.items.updateItems(todos.map((i) => i.id), (lista) => {
-          for (const it of lista) delete it.metadata[CHAVE_TOKEN_MEM];
-        });
-      }
-      await salvarConfig({ revelarTudo: false });
-    };
+      await limparMemoria(todos.map((i) => i.id));
+    });
 
-    el("btnRevelarTudo").onclick = async () => {
-      await salvarConfig({ revelarTudo: true });
-    };
-
+    // Início: só usa o SDK depois do onReady
     OBR.onReady(async () => {
-      await atualizarPainel();
-      OBR.scene.onMetadataChange(() => atualizarPainel());
-      OBR.scene.local.onChange(() => atualizarPainel());
-      OBR.player.onChange(() => atualizarPainel());
+      OBR.scene.onReadyChange(() => sincronizarPainel());
+      OBR.scene.onMetadataChange(() => sincronizarPainel());
+      OBR.scene.local.onChange(() => sincronizarPainel());
+      OBR.scene.items.onChange(() => atualizarCardSelecao());
+      OBR.player.onChange(() => atualizarCardSelecao());
+      await sincronizarPainel();
     });
   </script>
 </body>
