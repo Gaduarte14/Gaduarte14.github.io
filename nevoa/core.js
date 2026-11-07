@@ -25,6 +25,7 @@ export const CONFIG_PADRAO = {
   donoLuzEscolhido: "AUTO", // "AUTO" | "TODOS" | playerId específico
   presetLuz: "tocha",
   alcanceQuadrados: 6,
+  alcancePes: 30,
   raioFonteQuadrados: 1,
   falloff: 0.8,
   anguloCone: 360,

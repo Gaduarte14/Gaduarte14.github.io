@@ -287,7 +287,7 @@
           <button id="btnCancelar" class="btn">✕ Limpar</button>
         </div>
         <p class="hint">
-          Na barra lateral do Owlbear, escolha <b>Parede (Lápis)</b> para riscar à mão livre, criar linhas retas, abrir/fechar <b>Portas</b> ou apagar.
+          Na barra de ferramentas do Owlbear, escolha o ícone <b>Parede (Lápis)</b> e depois o modo <b>Lápis</b> para riscar à mão livre, criar linhas retas, abrir/fechar <b>Portas</b> ou apagar.
         </p>
       </div>
 
@@ -406,10 +406,10 @@
 
         <div class="field">
           <div class="field-top">
-            <span>Alcance Total (Attenuation Radius)</span>
-            <span id="valAlcance">6 q</span>
+            <span>Alcance da luz (pés) — Enter aplica na luz/token selecionado</span>
+            <span id="valAlcance">30 pés</span>
           </div>
-          <input id="inpAlcance" type="range" min="1" max="24" step="0.5" />
+          <input id="inpAlcance" type="number" min="5" max="1000" step="5" style="width:100%" />
         </div>
 
         <div class="field">
@@ -555,8 +555,8 @@
         el("selDonoLuz").value = cfg.donoLuzEscolhido || "AUTO";
         el("selPresetLuz").value = cfg.presetLuz || "tocha";
 
-        el("inpAlcance").value = cfg.alcanceQuadrados;
-        el("valAlcance").textContent = `${cfg.alcanceQuadrados} q`;
+        el("inpAlcance").value = cfg.alcancePes;
+        el("valAlcance").textContent = `${cfg.alcancePes} pés`;
 
         el("inpRaioFonte").value = cfg.raioFonteQuadrados;
         el("valRaioFonte").textContent = `${cfg.raioFonteQuadrados} q`;
@@ -622,6 +622,7 @@
           salvarConfig({
             presetLuz: chave,
             alcanceQuadrados: preset.alcanceQuadrados,
+            alcancePes: preset.alcanceQuadrados * 5,
             raioFonteQuadrados: preset.raioFonteQuadrados,
             falloff: preset.falloff,
             anguloCone: preset.anguloCone,
@@ -633,9 +634,10 @@
       });
 
       el("inpAlcance").addEventListener("input", (e) => {
-        salvarConfig({ alcanceQuadrados: Number(e.target.value) });
-        preencherFormulario();
+        salvarConfig({ alcancePes: Math.max(5, Number(e.target.value) || 30) });
+        el("valAlcance").textContent = `${Math.max(5, Number(e.target.value) || 30)} pés`;
       });
+      el("inpAlcance").addEventListener("change", () => enviarMensagem({ tipo: "APLICAR_ALCANCE" }));
       el("inpRaioFonte").addEventListener("input", (e) => {
         salvarConfig({ raioFonteQuadrados: Number(e.target.value) });
         preencherFormulario();

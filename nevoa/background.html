@@ -58,6 +58,7 @@
       let souMestre = false;
       let cenaPronta = false;
       let gridDpi = 150;
+      let escalaPes = 5; // pés por quadrado (lido da escala da cena)
 
       let paredesCena = [];
       let versaoAplicada = -1;
@@ -454,7 +455,7 @@
         return {
           visaoIndividual: Boolean(config.visaoIndividual),
           donoId,
-          alcanceQuadrados: Number(config.alcanceQuadrados) || 6,
+          alcanceQuadrados: (Number(config.alcancePes) || 30) / escalaPes,
           raioFonteQuadrados: Number(config.raioFonteQuadrados) || 1,
           falloff: Number(config.falloff) || 0.8,
           anguloCone: Number(config.anguloCone) || 360,
@@ -577,14 +578,17 @@
           }
 
           const passoCelula = Math.max(0.75, Number(config.resolucaoCelula) || 1.5) * gridDpi;
-          const raioMemPx = Math.max(1, Number(config.raioMemoriaQuadrados) || 5) * gridDpi;
+          const raioMemBase = Math.max(1, Number(config.raioMemoriaQuadrados) || 5) * gridDpi;
 
           let mudou = false;
           const origensAtivas = [];
 
+          let raioMemPx = raioMemBase;
           for (const tok of meusTokensComLuz) {
             const pos = tok.position;
-            origensAtivas.push({ pos, raio: raioMemPx });
+            const alcTok = (Number(tok.metadata[META_LUZ_TOKEN].alcanceQuadrados) || 6) * gridDpi;
+            const raioMemPx = Math.max(raioMemBase, alcTok);
+            origensAtivas.push({ pos, raio: alcTok });
 
             const passos = Math.ceil(raioMemPx / passoCelula);
             const cxBase = Math.round(pos.x / passoCelula);
@@ -655,34 +659,23 @@
             const pos = { x: gx * passoCelula, y: gy * passoCelula };
 
             const dentroVisaoAtual = origensAtivas.some(
-              (o) => distancia(o.pos, pos) < o.raio * 0.65 && temVisadaLivre(o.pos, pos, paredesCena)
+              (o) => distancia(o.pos, pos) < o.raio && temVisadaLivre(o.pos, pos, paredesCena)
             );
 
             if (dentroVisaoAtual) continue;
 
-            if (config.modoMemoria === "LUZ_SECUNDARIA") {
-              const lMem = criarLuzLocal({
-                id: `mem_light_${gx}_${gy}`, pos, alcance: passoCelula * 1.45, fonte: passoCelula * 0.25,
-                fall: Number(config.falloffMemoria) || 1.2, outer: 360, inner: 360, tipo: "AUXILIARY"
-              });
-              itensMemoria.push(lMem);
-              idsMemoriaLocais.push(lMem.id);
-            } else {
-              const shape = buildShape()
-                .id(`mem_sh_${gx}_${gy}`)
-                .shapeType("CIRCLE")
-                .width(passoCelula * 1.15)
-                .height(passoCelula * 1.15)
-                .position(pos)
-                .fillColor("#0f172a")
-                .fillOpacity(Number(config.opacidadeSombra) || 0.45)
-                .strokeOpacity(0)
-                .layer("FOG")
-                .disableHit(true)
-                .build();
-              itensMemoria.push(shape);
-              idsMemoriaLocais.push(shape.id);
-            }
+            // 1) luz auxiliar revela o mapa (respeita paredes); 2) véu cinza claro deixa "lembrado", não "iluminado"
+            const lMem = criarLuzLocal({
+              id: `mem_light_${gx}_${gy}`, pos, alcance: passoCelula * 1.0, fonte: 0,
+              fall: 0.3, outer: 360, inner: 360, tipo: "AUXILIARY"
+            });
+            itensMemoria.push(lMem); idsMemoriaLocais.push(lMem.id);
+            const veu = buildShape().id(`mem_sh_${gx}_${gy}`).shapeType("RECTANGLE")
+              .width(passoCelula + 2).height(passoCelula + 2)
+              .position({ x: pos.x - passoCelula / 2 - 1, y: pos.y - passoCelula / 2 - 1 })
+              .fillColor("#9ca3af").fillOpacity(Number(config.opacidadeSombra) || 0.5)
+              .strokeOpacity(0).strokeWidth(0).layer("CONTROL").disableHit(true).build();
+            itensMemoria.push(veu); idsMemoriaLocais.push(veu.id);
           }
 
           if (itensMemoria.length > 0) {
@@ -711,12 +704,7 @@
         await OBR.tool.create({
           id: `${NS}/tool-parede`,
           icons: [{ icon: ICONES.parede, label: "Parede (Lápis)" }],
-          shortcut: "W",
-          defaultMode: `${NS}/modo-lapis`,
-          disabled: {
-            roles: ["PLAYER"],
-            permissions: []
-          }
+          defaultMode: `${NS}/modo-lapis`
         });
 
         await OBR.tool.createMode({
@@ -729,6 +717,7 @@
             }
           ],
           onToolDragStart(_, ev) {
+            if (!souMestre) return;
             pontosAtuais = [ev.pointerPosition];
             atualizarRascunhoEPrevia();
           },
@@ -912,11 +901,11 @@
             }
             if (!souMestre) { await OBR.notification.show("Só o mestre coloca luzes soltas.", "WARNING"); return; }
             const perto = luzSoltaPerto(ev.pointerPosition);
-            if (perto) { luzSelecionadaId = perto.id; await sincronizarLuzesLocais(); return; }
+            if (perto) { luzSelecionadaId = perto.id; await sincronizarLuzesLocais(); await OBR.notification.show(`Luz selecionada: ${Math.round(perto.alc * escalaPes)} pés`, "INFO"); return; }
             const nova = {
               id: `l_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
               x: Math.round(ev.pointerPosition.x), y: Math.round(ev.pointerPosition.y),
-              alc: Number(config.alcanceQuadrados) || 6, fonte: Number(config.raioFonteQuadrados) || 1,
+              alc: (Number(config.alcancePes) || 30) / escalaPes, fonte: Number(config.raioFonteQuadrados) || 1,
               fall: Number(config.falloff) || 0.8, on: true
             };
             luzSelecionadaId = nova.id;
@@ -1000,13 +989,13 @@
         const ajustar = async (d) => {
           const l = luzesSoltas.find((x) => x.id === luzSelecionadaId);
           if (!l) { await OBR.notification.show("Clique numa luz solta com a ferramenta Luz para selecioná-la.", "WARNING"); return; }
-          l.alc = Math.max(0.5, Math.min(60, Math.round((l.alc + d) * 2) / 2));
+          l.alc = Math.max(0.5, Math.min(200, Math.round((l.alc + d) * 10) / 10));
           await salvarLuzesSoltas([...luzesSoltas]);
-          await OBR.notification.show(`Raio da luz: ${l.alc} quadrados`, "INFO");
+          await OBR.notification.show(`Raio da luz: ${Math.round(l.alc * escalaPes)} pés`, "INFO");
         };
         const filtroLuz = { activeTools: [`${NS}/tool-luz`] };
-        await OBR.tool.createAction({ id: `${NS}/acao-luz-mais`, icons: [{ icon: ICONES.mais, label: "Aumentar raio (+0,5)", filter: filtroLuz }], onClick() { ajustar(0.5); } });
-        await OBR.tool.createAction({ id: `${NS}/acao-luz-menos`, icons: [{ icon: ICONES.menos, label: "Diminuir raio (−0,5)", filter: filtroLuz }], onClick() { ajustar(-0.5); } });
+        await OBR.tool.createAction({ id: `${NS}/acao-luz-mais`, icons: [{ icon: ICONES.mais, label: "Aumentar raio (+5 pés)", filter: filtroLuz }], onClick() { ajustar(5 / escalaPes); } });
+        await OBR.tool.createAction({ id: `${NS}/acao-luz-menos`, icons: [{ icon: ICONES.menos, label: "Diminuir raio (−5 pés)", filter: filtroLuz }], onClick() { ajustar(-5 / escalaPes); } });
         await OBR.tool.createAction({
           id: `${NS}/acao-luz-apagar`, icons: [{ icon: ICONES.apagarLuz, label: "Apagar luz solta selecionada", filter: filtroLuz }],
           async onClick() {
@@ -1110,6 +1099,23 @@
             await aplicarLuzNosSelecionados();
             break;
 
+          case "APLICAR_ALCANCE": {
+            const q = (Number(config.alcancePes) || 30) / escalaPes;
+            let n = 0;
+            const l = luzesSoltas.find((x) => x.id === luzSelecionadaId);
+            if (l && souMestre) { l.alc = q; await salvarLuzesSoltas([...luzesSoltas]); n++; }
+            const sel = (await OBR.player.getSelection()) || [];
+            const ids = sel.length ? (await OBR.scene.items.getItems(sel)).filter((i) => i.metadata?.[META_LUZ_TOKEN]).map((i) => i.id) : [];
+            if (ids.length) {
+              await OBR.scene.items.updateItems(ids, (items) => { for (const it of items) it.metadata[META_LUZ_TOKEN].alcanceQuadrados = q; });
+              await sincronizarLuzesLocais();
+              if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+              n += ids.length;
+            }
+            await OBR.notification.show(n ? `Alcance de ${config.alcancePes} pés aplicado (${n}).` : "Selecione uma luz solta (ferramenta Luz) ou um token com luz.", n ? "SUCCESS" : "WARNING");
+            break;
+          }
+
           case "LIMPAR_LUZES": {
             const comLuz = await OBR.scene.items.getItems((it) => Boolean(it.metadata?.[META_LUZ_TOKEN]));
             if (comLuz.length > 0) {
@@ -1196,6 +1202,7 @@
           meuNome = await OBR.player.getName();
           souMestre = (await OBR.player.getRole()) === "GM";
           gridDpi = await OBR.scene.grid.getDpi();
+          try { escalaPes = Number((await OBR.scene.grid.getScale())?.parsed?.multiplier) || 5; } catch {}
 
           const meta = await OBR.scene.getMetadata();
           const lido = lerParedesDaCena(meta);
@@ -1228,6 +1235,7 @@
 
         try {
           await registrarFerramentas();
+          OBR.notification.show(`3 em 1 pronto (${souMestre ? "Mestre" : "Jogador — só o mestre desenha paredes"})`, "SUCCESS");
         } catch (e) {
           console.error("[3em1] ferramentas:", e);
           OBR.notification.show("3 em 1: erro ao criar ferramentas: " + (e?.message || e), "ERROR");
