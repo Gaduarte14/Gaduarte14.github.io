@@ -45,6 +45,8 @@
         cancelar: svgUri(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`),
         luz: svgUri(`<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`),
         cone: svgUri(`<path d="M3 12h2l7-8v16l-7-8H3z"/><path d="M16 8c1.5 1.5 1.5 6.5 0 8"/>`),
+        mais: svgUri(`<path d="M12 5v14M5 12h14"/>`),
+        menos: svgUri(`<path d="M5 12h14"/>`),
         apagarLuz: svgUri(`<line x1="2" y1="2" x2="22" y2="22"/><path d="M12 6a6 6 0 0 1 6 6c0 1.3-.4 2.5-1.1 3.5"/><path d="M8.5 8.5A6 6 0 0 0 12 18"/>`)
       };
 
@@ -76,6 +78,51 @@
 
       let celulasVisitadas = new Set();
       let timerMemoria = null;
+
+      const META_LUZES = `${NS}/luzes-soltas`;
+      let luzesSoltas = [], luzSelecionadaId = null, luzArrastando = null;
+
+      // lightType não é método do LightBuilder (ver docs): define-se na propriedade do item
+      function criarLuzLocal(o) {
+        const b = buildLight().id(o.id).position(o.pos).attenuationRadius(o.alcance)
+          .sourceRadius(o.fonte).falloff(o.fall).outerAngle(o.outer).innerAngle(o.inner);
+        if (o.name) b.name(o.name);
+        if (o.rot) b.rotation(o.rot);
+        if (o.attach) {
+          b.attachedTo(o.attach);
+          if (typeof b.disableAttachmentBehavior === "function") b.disableAttachmentBehavior(["SCALE"]);
+        }
+        const it = b.build();
+        it.lightType = o.tipo || "PRIMARY";
+        return it;
+      }
+
+      // Evita corridas: se já está rodando, roda mais uma vez ao terminar (junta chamadas)
+      function serial(fn) {
+        let rodando = null, fila = false;
+        const run = async () => { do { fila = false; await fn(); } while (fila); };
+        return () => {
+          if (rodando) { fila = true; return rodando; }
+          rodando = run().finally(() => (rodando = null));
+          return rodando;
+        };
+      }
+
+      function luzSoltaPerto(p, raio = gridDpi * 0.5) {
+        let melhor = null, menor = raio;
+        for (const l of luzesSoltas) {
+          const d = distancia(p, { x: l.x, y: l.y });
+          if (d <= menor) { menor = d; melhor = l; }
+        }
+        return melhor;
+      }
+
+      async function salvarLuzesSoltas(lista) {
+        luzesSoltas = lista;
+        await OBR.scene.setMetadata({ [META_LUZES]: lista });
+        await sincronizarLuzesLocais();
+        if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+      }
 
       // ========================================================================
       // 1. Paredes Locais (Wall Nativa + Linha Vermelha do Mestre)
@@ -363,26 +410,30 @@
             const inner = outer < 360 ? Math.min(outer, Math.max(5, Number(cfgLuz.anguloInterno) || 35)) : 360;
             const tipo = cfgLuz.tipoLuz || "PRIMARY";
 
-            const builder = buildLight()
-              .id(`local_light_${tok.id}`)
-              .name(`Luz de ${tok.name || "Token"}`)
-              .position(tok.position)
-              .rotation(Number(cfgLuz.rotacaoFeixe ?? tok.rotation ?? 0))
-              .attenuationRadius(alcancePx)
-              .sourceRadius(fontePx)
-              .falloff(falloffVal)
-              .outerAngle(outer)
-              .innerAngle(inner)
-              .lightType(tipo)
-              .attachedTo(tok.id);
-
-            if (typeof builder.disableAttachmentBehavior === "function") {
-              builder.disableAttachmentBehavior(["SCALE"]);
-            }
-
-            const itemLocal = builder.build();
+            const itemLocal = criarLuzLocal({
+              id: `local_light_${tok.id}`, name: `Luz de ${tok.name || "Token"}`, pos: tok.position,
+              rot: Number(cfgLuz.rotacaoFeixe ?? tok.rotation ?? 0), alcance: alcancePx, fonte: fontePx,
+              fall: falloffVal, outer, inner, tipo, attach: tok.id
+            });
             novasLuzesLocais.push(itemLocal);
             idsLuzesLocais.push(itemLocal.id);
+          }
+
+          for (const l of luzesSoltas) {
+            if (l.on === false) continue;
+            const it = criarLuzLocal({
+              id: `local_light_solta_${l.id}`, pos: { x: l.x, y: l.y }, alcance: l.alc * gridDpi,
+              fonte: Math.max(0.1, l.fonte || 0.5) * gridDpi, fall: Number(l.fall) || 0.8,
+              outer: 360, inner: 360, tipo: "PRIMARY"
+            });
+            novasLuzesLocais.push(it); idsLuzesLocais.push(it.id);
+            if (souMestre) { // marcador só para o mestre
+              const sel = l.id === luzSelecionadaId, d = gridDpi * (sel ? 0.45 : 0.3);
+              const m = buildShape().id(`local_light_marker_${l.id}`).shapeType("CIRCLE").width(d).height(d)
+                .position({ x: l.x, y: l.y }).fillColor("#facc15").fillOpacity(0.85)
+                .strokeColor(sel ? "#ffffff" : "#b45309").strokeWidth(sel ? 4 : 2).layer("CONTROL").disableHit(true).build();
+              novasLuzesLocais.push(m); idsLuzesLocais.push(m.id);
+            }
           }
 
           if (novasLuzesLocais.length > 0) {
@@ -472,6 +523,8 @@
       }
 
       async function removerLuzDeAlvoOuPonto(posicao, alvo) {
+        const solta = souMestre && luzSoltaPerto(posicao, gridDpi * 0.8);
+        if (solta) { await salvarLuzesSoltas(luzesSoltas.filter((x) => x.id !== solta.id)); luzSelecionadaId = null; return; }
         if (alvo && alvo.metadata?.[META_LUZ_TOKEN]) {
           await OBR.scene.items.updateItems([alvo.id], (items) => {
             for (const item of items) {
@@ -556,6 +609,20 @@
             }
           }
 
+          // Áreas iluminadas por luzes soltas entram na memória se algum token meu as enxerga
+          for (const l of luzesSoltas) {
+            if (l.on === false) continue;
+            const lp = { x: l.x, y: l.y }, raioL = l.alc * gridDpi;
+            const n = Math.ceil(raioL / passoCelula), cx = Math.round(l.x / passoCelula), cy = Math.round(l.y / passoCelula);
+            for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) {
+              const c = { x: (cx + dx) * passoCelula, y: (cy + dy) * passoCelula };
+              if (distancia(lp, c) > raioL || !temVisadaLivre(lp, c, paredesCena)) continue;
+              const vista = meusTokensComLuz.some((t) => distancia(t.position, c) <= raioMemPx * 1.6 && temVisadaLivre(t.position, c, paredesCena));
+              const chave = `${cx + dx},${cy + dy}`;
+              if (vista && !celulasVisitadas.has(chave)) { celulasVisitadas.add(chave); mudou = true; }
+            }
+          }
+
           if (mudou) {
             salvarMemoriaLocalJogador(meuPlayerId, celulasVisitadas);
           }
@@ -594,14 +661,10 @@
             if (dentroVisaoAtual) continue;
 
             if (config.modoMemoria === "LUZ_SECUNDARIA") {
-              const lMem = buildLight()
-                .id(`mem_light_${gx}_${gy}`)
-                .position(pos)
-                .attenuationRadius(passoCelula * 1.45)
-                .sourceRadius(passoCelula * 0.25)
-                .falloff(Number(config.falloffMemoria) || 1.2)
-                .lightType("AUXILIARY")
-                .build();
+              const lMem = criarLuzLocal({
+                id: `mem_light_${gx}_${gy}`, pos, alcance: passoCelula * 1.45, fonte: passoCelula * 0.25,
+                fall: Number(config.falloffMemoria) || 1.2, outer: 360, inner: 360, tipo: "AUXILIARY"
+              });
               itensMemoria.push(lMem);
               idsMemoriaLocais.push(lMem.id);
             } else {
@@ -837,12 +900,41 @@
           icons: [
             {
               icon: ICONES.luz,
-              label: "Anexar Luz no Token",
+              label: "Luz (clique no mapa ou num token)",
               filter: { activeTools: [`${NS}/tool-luz`] }
             }
           ],
-          onToolClick(_, ev) {
-            aplicarLuzEmTokenAlvo(ev.target);
+          async onToolClick(_, ev) {
+            const alvo = ev.target;
+            if (alvo && ["CHARACTER", "MOUNT", "PROP", "ATTACHMENT"].includes(alvo.layer) && alvo.type !== "LIGHT") {
+              await aplicarLuzEmTokenAlvo(alvo);
+              return;
+            }
+            if (!souMestre) { await OBR.notification.show("Só o mestre coloca luzes soltas.", "WARNING"); return; }
+            const perto = luzSoltaPerto(ev.pointerPosition);
+            if (perto) { luzSelecionadaId = perto.id; await sincronizarLuzesLocais(); return; }
+            const nova = {
+              id: `l_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+              x: Math.round(ev.pointerPosition.x), y: Math.round(ev.pointerPosition.y),
+              alc: Number(config.alcanceQuadrados) || 6, fonte: Number(config.raioFonteQuadrados) || 1,
+              fall: Number(config.falloff) || 0.8, on: true
+            };
+            luzSelecionadaId = nova.id;
+            await salvarLuzesSoltas([...luzesSoltas, nova]);
+          },
+          onToolDragStart(_, ev) {
+            if (!souMestre) return;
+            const l = luzSoltaPerto(ev.pointerPosition, gridDpi * 0.6);
+            if (l) { luzArrastando = l.id; luzSelecionadaId = l.id; }
+          },
+          onToolDragMove(_, ev) {
+            const l = luzArrastando && luzesSoltas.find((x) => x.id === luzArrastando);
+            if (l) { l.x = ev.pointerPosition.x; l.y = ev.pointerPosition.y; sincronizarLuzesLocais(); }
+          },
+          async onToolDragEnd() {
+            if (!luzArrastando) return;
+            luzArrastando = null;
+            await salvarLuzesSoltas([...luzesSoltas]);
           }
         });
 
@@ -901,6 +993,26 @@
           ],
           onToolClick(_, ev) {
             removerLuzDeAlvoOuPonto(ev.pointerPosition, ev.target);
+          }
+        });
+
+        // Ajuste de raio e exclusão da luz solta selecionada
+        const ajustar = async (d) => {
+          const l = luzesSoltas.find((x) => x.id === luzSelecionadaId);
+          if (!l) { await OBR.notification.show("Clique numa luz solta com a ferramenta Luz para selecioná-la.", "WARNING"); return; }
+          l.alc = Math.max(0.5, Math.min(60, Math.round((l.alc + d) * 2) / 2));
+          await salvarLuzesSoltas([...luzesSoltas]);
+          await OBR.notification.show(`Raio da luz: ${l.alc} quadrados`, "INFO");
+        };
+        const filtroLuz = { activeTools: [`${NS}/tool-luz`] };
+        await OBR.tool.createAction({ id: `${NS}/acao-luz-mais`, icons: [{ icon: ICONES.mais, label: "Aumentar raio (+0,5)", filter: filtroLuz }], onClick() { ajustar(0.5); } });
+        await OBR.tool.createAction({ id: `${NS}/acao-luz-menos`, icons: [{ icon: ICONES.menos, label: "Diminuir raio (−0,5)", filter: filtroLuz }], onClick() { ajustar(-0.5); } });
+        await OBR.tool.createAction({
+          id: `${NS}/acao-luz-apagar`, icons: [{ icon: ICONES.apagarLuz, label: "Apagar luz solta selecionada", filter: filtroLuz }],
+          async onClick() {
+            if (!luzSelecionadaId) return;
+            await salvarLuzesSoltas(luzesSoltas.filter((x) => x.id !== luzSelecionadaId));
+            luzSelecionadaId = null;
           }
         });
       }
@@ -1089,6 +1201,7 @@
           const lido = lerParedesDaCena(meta);
           paredesCena = lido.paredes;
           versaoAplicada = lido.versao;
+          luzesSoltas = Array.isArray(meta[META_LUZES]) ? meta[META_LUZES] : [];
 
           celulasVisitadas = lerMemoriaLocalJogador(meuPlayerId);
 
@@ -1104,12 +1217,21 @@
         }
       }
 
+      reconstruirParedesLocais = serial(reconstruirParedesLocais);
+      atualizarRascunhoEPrevia = serial(atualizarRascunhoEPrevia);
+      sincronizarLuzesLocais = serial(sincronizarLuzesLocais);
+
       OBR.onReady(async () => {
         meuPlayerId = await OBR.player.getId();
         meuNome = await OBR.player.getName();
         souMestre = (await OBR.player.getRole()) === "GM";
 
-        await registrarFerramentas();
+        try {
+          await registrarFerramentas();
+        } catch (e) {
+          console.error("[3em1] ferramentas:", e);
+          OBR.notification.show("3 em 1: erro ao criar ferramentas: " + (e?.message || e), "ERROR");
+        }
 
         if (await OBR.scene.isReady()) {
           await carregarCena();
@@ -1150,6 +1272,12 @@
         });
 
         OBR.scene.onMetadataChange(async (meta) => {
+          const novas = Array.isArray(meta[META_LUZES]) ? meta[META_LUZES] : [];
+          if (JSON.stringify(novas) !== JSON.stringify(luzesSoltas)) {
+            luzesSoltas = novas;
+            await sincronizarLuzesLocais();
+            if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+          }
           const lido = lerParedesDaCena(meta);
           if (lido.versao !== versaoAplicada) {
             versaoAplicada = lido.versao;
