@@ -1,4 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="4" />
-  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#1e1b2e"/>
+  <!-- Parede -->
+  <path d="M12 46V24L26 16L40 24V46" stroke="#ef4444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Luz / Brilho -->
+  <circle cx="44" cy="24" r="7" fill="#facc15"/>
+  <path d="M44 11V14M44 34V37M31 24H34M54 24H57M35 15L37 17M51 31L53 33M53 15L51 17M37 31L35 33" stroke="#fde047" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Névoa -->
+  <path d="M10 50H54M16 56H48" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>
 </svg>

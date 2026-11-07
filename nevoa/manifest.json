@@ -1,16 +1,15 @@
 {
-  "name": "Paredes, Luz e Memória de Névoa",
+  "name": "Parede, Luz e Névoa (3 em 1)",
   "version": "1.0.0",
   "manifest_version": 1,
   "author": "Gaduarte14",
-  "description": "Parede com lápis, luz com falloff suave e memória de névoa por token.",
-  "icon": "https://gaduarte14.github.io/nevoa/icon.svg",
+  "description": "Desenho de paredes a lápis/linha/porta, iluminação com falloff e memória de névoa automática.",
   "action": {
-    "title": "Paredes, Luz e Névoa",
-    "icon": "https://gaduarte14.github.io/nevoa/icon.svg",
-    "popover": "https://gaduarte14.github.io/nevoa/index.html",
-    "height": 600,
-    "width": 380
+    "title": "Parede, Luz e Névoa (3 em 1)",
+    "icon": "/nevoa/icon.svg",
+    "popover": "/nevoa/index.html",
+    "width": 390,
+    "height": 600
   },
-  "background_url": "https://gaduarte14.github.io/nevoa/background.html"
+  "background_url": "/nevoa/background.html"
 }

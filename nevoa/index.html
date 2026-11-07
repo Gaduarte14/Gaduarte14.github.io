@@ -1,548 +1,752 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel - Paredes, Luz e Névoa</title>
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 10px;
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #14161f;
-      color: #f1f5f9;
-      font-size: 13px;
-    }
-    .tabs {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
-      margin-bottom: 10px;
-    }
-    .tab-btn {
-      min-height: 38px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #1e2436;
-      color: #94a3b8;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .tab-btn.active {
-      background: #eab308;
-      color: #0f172a;
-      border-color: #fde047;
-    }
-    .tab-pane { display: none; }
-    .tab-pane.active { display: block; }
-    .card {
-      padding: 10px;
-      border-radius: 10px;
-      background: #1d212f;
-      border: 1px solid #2e354b;
-      margin-bottom: 8px;
-    }
-    .card-title {
-      font-weight: 700;
-      font-size: 13px;
-      margin-bottom: 8px;
-      color: #fde047;
-      display: flex;
-      justify-content: space-between;
-    }
-    .btn-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-    button {
-      min-height: 42px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      border: 1px solid #3b4256;
-      background: #283044;
-      color: #f8fafc;
-      font-weight: 600;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    button:hover:not(:disabled) { filter: brightness(1.15); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-concluir {
-      grid-column: span 2;
-      background: #16a34a;
-      border-color: #22c55e;
-      font-size: 14px;
-    }
-    .btn-perigo {
-      background: #7f1d1d;
-      border-color: #ef4444;
-    }
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 7px;
-      gap: 8px;
-    }
-    .row label { flex: 1; color: #cbd5e1; }
-    input[type="range"] { width: 115px; }
-    input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
-    input[type="color"] { width: 42px; height: 28px; border: none; background: none; cursor: pointer; }
-    select, input[type="number"] {
-      background: #0f172a;
-      color: #f8fafc;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 5px 8px;
-    }
-    .hint { font-size: 11px; color: #94a3b8; line-height: 1.35; }
-  </style>
-</head>
-<body>
-  <!-- Navegação entre as 3 funções -->
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="tab-paredes">1. Paredes</button>
-    <button class="tab-btn" data-tab="tab-luz">2. Luz Falloff</button>
-    <button class="tab-btn" data-tab="tab-nevoa">3. Névoa</button>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parede, Luz e Névoa (3 em 1)</title>
+    <style>
+      :root {
+        --bg: #161622;
+        --card: #212134;
+        --border: #32324d;
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --accent: #6366f1;
+        --accent-hover: #4f46e5;
+        --teal: #14b8a6;
+        --danger: #ef4444;
+      }
 
-  <!-- ABA 1: PAREDE COM LÁPIS -->
-  <div id="tab-paredes" class="tab-pane active">
-    <div class="card">
-      <div class="card-title">
-        <span>Traços Riscados: <b id="lblTracos">0</b></span>
-        <span>Salvas: <b id="lblParedes">0</b></span>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+        padding: 12px;
+        user-select: none;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+
+      .header h1 {
+        font-size: 15px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 99px;
+        background: rgba(20, 184, 166, 0.18);
+        color: #2dd4bf;
+        font-weight: 600;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .stat-box {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px;
+        text-align: center;
+      }
+
+      .stat-box strong {
+        display: block;
+        font-size: 15px;
+        color: #fff;
+      }
+
+      .stat-box span {
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+        background: var(--card);
+        padding: 4px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+
+      .tab-btn {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        padding: 7px 4px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 7px;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+
+      .tab-btn.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .tab-panel {
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .tab-panel.active {
+        display: flex;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .card-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #cbd5e1;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      .btn-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+
+      .btn-row-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
+      }
+
+      button.btn {
+        background: #2d2d46;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        padding: 7px 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+
+      button.btn:hover {
+        background: #3a3a59;
+      }
+
+      button.btn-primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      button.btn-primary:hover {
+        background: var(--accent-hover);
+      }
+
+      button.btn-teal {
+        background: #0d9488;
+        border-color: #14b8a6;
+        color: #fff;
+      }
+
+      button.btn-danger {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: rgba(239, 68, 68, 0.4);
+        color: #fca5a5;
+      }
+
+      button.btn-danger:hover {
+        background: rgba(239, 68, 68, 0.28);
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .field-top {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+
+      .field-top span:last-child {
+        color: #38bdf8;
+        font-weight: 600;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      select {
+        width: 100%;
+        background: #161622;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+
+      .check-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        padding: 2px 0;
+      }
+
+      .check-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+
+      .hint {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🧱🔦🌫️ 3 em 1</h1>
+      <span id="statusCena" class="badge">Conectando...</span>
+    </div>
+
+    <div class="status-grid">
+      <div class="stat-box">
+        <strong id="stParedes">0</strong>
+        <span>Paredes</span>
       </div>
-      <div class="btn-grid">
-        <button id="btnConcluir" class="btn-concluir" disabled>
-          ✓ Concluir e Organizar Parede
-        </button>
-        <button id="btnDesfazerTraco" disabled>↩ Desfazer Traço</button>
-        <button id="btnCancelar" class="btn-perigo" disabled>✕ Cancelar</button>
+      <div class="stat-box">
+        <strong id="stPendentes">0</strong>
+        <span>Rascunho</span>
       </div>
-      <div class="hint">
-        Risque no mapa arrastando o mouse (ou clique no Ponto 1 e depois no Ponto 2). Depois clique em <b>Concluir</b>.
+      <div class="stat-box">
+        <strong id="stLuzes">0</strong>
+        <span>Luzes</span>
+      </div>
+      <div class="stat-box">
+        <strong id="stMemoria">0</strong>
+        <span>Memória</span>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Ajustes do Traço (Tempo Real)</div>
-      <div class="row">
-        <label>Modo Linha Reta ao arrastar</label>
-        <input type="checkbox" id="chkLinhaReta" />
-      </div>
-      <div class="row">
-        <label>Simplificar (RDP): <b id="valRDP">12</b>px</label>
-        <input type="range" id="rngRDP" min="2" max="40" value="12" />
-      </div>
-      <div class="row">
-        <label>Endireitar Retas: <b id="valAngulo">8</b>°</label>
-        <input type="range" id="rngAngulo" min="0" max="20" value="8" />
-      </div>
-      <div class="row">
-        <label>Aceitar Diagonais de 45°</label>
-        <input type="checkbox" id="chkDiag45" checked />
-      </div>
-      <div class="row">
-        <label>Alinhar Pontas ao Grid</label>
-        <input type="checkbox" id="chkGrid" />
-      </div>
-      <div class="row">
-        <label>Raio p/ Grudar/Fechar: <b id="valSnap">25</b>px</label>
-        <input type="range" id="rngSnap" min="0" max="60" value="25" />
-      </div>
-      <div class="row">
-        <label>Mostrar paredes laranjas (Mestre)</label>
-        <input type="checkbox" id="chkMostrarParedes" checked />
-      </div>
-      <div class="row">
-        <label>Bloquear movimento de tokens</label>
-        <input type="checkbox" id="chkBloquearTokens" checked />
-      </div>
-      <button id="btnApagarParedes" class="btn-perigo" style="width: 100%; margin-top: 4px;">
-        Apagar Todas as Paredes
-      </button>
-    </div>
-  </div>
-
-  <!-- ABA 2: LUZ COM FALLOFF E FERRAMENTA [LUZ] -->
-  <div id="tab-luz" class="tab-pane">
-    <div class="card">
-      <div class="card-title">Ferramenta [Luz] (Luzes Soltas)</div>
-      <button id="btnCriarLuzCentro" class="btn-concluir" style="width: 100%; margin-bottom: 8px;">
-        + Criar Fonte de [Luz] no Mapa
-      </button>
-      <div class="row">
-        <label>Cor Padrão da Luz</label>
-        <input type="color" id="corLuzPadrao" value="#ffe8b6" />
-      </div>
-      <div class="row">
-        <label>Falloff Padrão: <b id="valFalloff">0.50</b></label>
-        <input type="range" id="rngFalloff" min="0" max="1" step="0.05" value="0.5" />
-      </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="paredes">🧱 Paredes</button>
+      <button class="tab-btn" data-tab="luzes">🔦 Luz (Falloff)</button>
+      <button class="tab-btn" data-tab="nevoa">🌫️ Névoa</button>
     </div>
 
-    <!-- Aparece quando o Mestre seleciona uma Luz Solta ou um Token no mapa -->
-    <div class="card" id="cardItemSelecionado">
-      <div class="card-title" id="tituloSelecionado">Selecione um Token ou [Luz] no mapa</div>
-      <div id="conteudoSelecionado" class="hint">
-        Clique em um Token de jogador ou em uma fonte de [Luz] no mapa para configurar o raio de Luz e Visão.
+    <!-- ABA 1: PAREDES -->
+    <div id="tab-paredes" class="tab-panel active">
+      <div class="card">
+        <div class="card-title">Ações Rápidas do Rascunho</div>
+        <div class="btn-row-4">
+          <button id="btnConcluir" class="btn btn-teal">✓ Concluir</button>
+          <button id="btnDesfazer" class="btn">↶ Desfazer</button>
+          <button id="btnRefazer" class="btn">↷ Refazer</button>
+          <button id="btnCancelar" class="btn">✕ Limpar</button>
+        </div>
+        <p class="hint">
+          Na barra lateral do Owlbear, escolha <b>Parede (Lápis)</b> para riscar à mão livre, criar linhas retas, abrir/fechar <b>Portas</b> ou apagar.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Geometria e Ajustes do Lápis</div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Simplificação do traço (RDP)</span>
+            <span id="valSimplificacao">10 px</span>
+          </div>
+          <input id="inpSimplificacao" type="range" min="0" max="35" step="1" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Fusão de ângulo reto/colinear</span>
+            <span id="valAngulo">10°</span>
+          </div>
+          <input id="inpAngulo" type="range" min="0" max="30" step="1" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Distância para grudar pontas</span>
+            <span id="valGrudar">28 px</span>
+          </div>
+          <input id="inpGrudar" type="range" min="0" max="60" step="2" />
+        </div>
+
+        <label class="check-row">
+          <span>Grudar pontas automaticamente</span>
+          <input id="chkGrudarPontas" type="checkbox" />
+        </label>
+
+        <label class="check-row">
+          <span>Fechar polígono ao encostar no início</span>
+          <input id="chkFecharPoligono" type="checkbox" />
+        </label>
+
+        <label class="check-row">
+          <span>Alinhar retas (0° / 45° / 90°)</span>
+          <input id="chkAlinharRetas" type="checkbox" />
+        </label>
+
+        <label class="check-row">
+          <span>Grudar vértices no Grid da cena</span>
+          <input id="chkGrudarGrid" type="checkbox" />
+        </label>
+
+        <label class="check-row">
+          <span>Mostrar linha vermelha (Mestre)</span>
+          <input id="chkMostrarMestre" type="checkbox" />
+        </label>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Gerenciar Paredes da Cena</div>
+        <div class="btn-row">
+          <button id="btnExportar" class="btn">⬇ Exportar JSON</button>
+          <button id="btnImportar" class="btn">⬆ Importar JSON</button>
+        </div>
+        <input id="fileImportar" type="file" accept=".json" style="display: none" />
+        <button id="btnLimparParedes" class="btn btn-danger">🗑️ Apagar Todas as Paredes</button>
       </div>
     </div>
-  </div>
 
-  <!-- ABA 3: MEMÓRIA DE NÉVOA (3 ESTADOS) -->
-  <div id="tab-nevoa" class="tab-pane">
-    <div class="card">
-      <div class="card-title">Névoa de 3 Estados + Memória</div>
-      <div class="row">
-        <label><b>Ativar Névoa e Memória na Cena</b></label>
-        <input type="checkbox" id="chkNevoaAtiva" checked />
+    <!-- ABA 2: LUZ COM VISÃO INDIVIDUAL -->
+    <div id="tab-luzes" class="tab-panel">
+      <div class="card">
+        <div class="card-title">Visão Individual por Jogador</div>
+
+        <label class="check-row">
+          <span>🔒 Cada player só vê a luz do próprio token</span>
+          <input id="chkVisaoIndividual" type="checkbox" />
+        </label>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Quem enxerga a luz deste token:</span>
+          </div>
+          <select id="selDonoLuz">
+            <option value="AUTO">🤖 Automático (1º jogador que clicar no token)</option>
+            <option value="TODOS">🌐 Todos os Jogadores (Compartilhada)</option>
+          </select>
+        </div>
+
+        <p class="hint">
+          Com a opção acima ativa, cada jogador vê <b>somente</b> a luz do seu próprio token e não vê a luz do amigo. O Mestre sempre vê tudo.
+        </p>
       </div>
-      <div class="row">
-        <label>Cor da "Névoa de Hoje" (Explorado)</label>
-        <input type="color" id="corNevoaExplorada" value="#181822" />
-      </div>
-      <div class="row">
-        <label>Opacidade Explorado: <b id="valOpNevoa">74</b>%</label>
-        <input type="range" id="rngOpNevoa" min="20" max="95" value="74" />
-      </div>
-      <div class="row">
-        <label>Visão do Mestre:</label>
-        <select id="selVisaoMestre">
-          <option value="TUDO">Mestre (Semi-transparente)</option>
-          <option value="PLAYERS">Ver como Players (100%)</option>
+
+      <div class="card">
+        <div class="card-title">Presets de Iluminação</div>
+        <select id="selPresetLuz">
+          <option value="tocha">🔥 Tocha (6q / 360°)</option>
+          <option value="lanterna">🏮 Lanterna (9q / 360°)</option>
+          <option value="vela">🕯️ Vela (2.5q / Borda Suave)</option>
+          <option value="visaoEscuro">👁️ Visão no Escuro (12q)</option>
+          <option value="cone">🔦 Lanterna Foco (Cone 65°)</option>
+          <option value="ambiente">✨ Luz Ambiente (Secundária)</option>
         </select>
+
+        <div class="btn-row">
+          <button id="btnLuzSelecionados" class="btn btn-primary">
+            ✨ Aplicar no Token Selecionado
+          </button>
+          <button id="btnLimparLuzes" class="btn btn-danger">
+            🗑️ Remover Todas as Luzes
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Ajuste Fino da Luz (Falloff Nativo)</div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Alcance Total (Attenuation Radius)</span>
+            <span id="valAlcance">6 q</span>
+          </div>
+          <input id="inpAlcance" type="range" min="1" max="24" step="0.5" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Raio Central Brilhante (Source Radius)</span>
+            <span id="valRaioFonte">1 q</span>
+          </div>
+          <input id="inpRaioFonte" type="range" min="0.2" max="8" step="0.2" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Suavidade da Borda (Falloff)</span>
+            <span id="valFalloff">0.8</span>
+          </div>
+          <input id="inpFalloff" type="range" min="0.1" max="2.0" step="0.05" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Ângulo de Abertura (360° ou Cone)</span>
+            <span id="valAnguloCone">360°</span>
+          </div>
+          <input id="inpAnguloCone" type="range" min="25" max="360" step="5" />
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Controle da Memória dos Tokens</div>
-      <div class="btn-grid">
-        <button id="btnLimparMemToken">Limpar Token Selecionado</button>
-        <button id="btnLimparMemTudo" class="btn-perigo">Limpar Toda a Memória</button>
+    <!-- ABA 3: MEMÓRIA DE NÉVOA -->
+    <div id="tab-nevoa" class="tab-panel">
+      <div class="card">
+        <div class="card-title">Controle da Névoa da Cena</div>
+        <button id="btnAlternarNevoaCena" class="btn btn-primary">
+          🌫️ Alternar Preenchimento de Névoa na Cena
+        </button>
+        <p class="hint">
+          A memória de névoa também é <b>individual</b>: cada jogador só mantém abertas as salas que o token <b>dele</b> já visitou!
+        </p>
       </div>
-      <div class="hint">
-        • <b>Nunca explorado:</b> Escuridão total (preto)<br/>
-        • <b>Já explorado (sem luz agora):</b> Névoa de hoje<br/>
-        • <b>Iluminado/visto agora:</b> Claro com falloff suave
+
+      <div class="card">
+        <div class="card-title">Memória de Névoa (Rastro Explorado)</div>
+
+        <label class="check-row">
+          <span>Rastrear movimento do token com luz</span>
+          <input id="chkMemoriaAtiva" type="checkbox" />
+        </label>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Estilo de Memória</span>
+          </div>
+          <select id="selModoMemoria">
+            <option value="LUZ_SECUNDARIA">Luz Auxiliar Suave (Mantém salas visitadas abertas)</option>
+            <option value="SOMBRA_VISUAL">Sombra de Rastro (Marca áreas já visitadas)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Raio de Gravação da Memória</span>
+            <span id="valRaioMemoria">5 q</span>
+          </div>
+          <input id="inpRaioMemoria" type="range" min="2" max="14" step="0.5" />
+        </div>
+
+        <div class="field">
+          <div class="field-top">
+            <span>Tamanho da Célula de Memória</span>
+            <span id="valResolucao">1.5 q</span>
+          </div>
+          <input id="inpResolucao" type="range" min="1" max="3" step="0.25" />
+        </div>
+
+        <div class="btn-row">
+          <button id="btnRegistrarAgora" class="btn btn-teal">📍 Revelar Posição Atual</button>
+          <button id="btnLimparMemoria" class="btn btn-danger">🗑️ Limpar Minha Memória</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Abas: script comum, funciona mesmo se o SDK falhar ao carregar -->
-  <script>
-    document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn, .tab-pane").forEach((el) => el.classList.remove("active"));
-        btn.classList.add("active");
-        document.getElementById(btn.dataset.tab).classList.add("active");
+    <script type="module">
+      import {
+        PRESETS_LUZ,
+        lerConfig,
+        salvarConfig,
+        enviarMensagem,
+        escutarMensagens
+      } from "./core.js";
+
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+          document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+        });
       });
-    });
-  </script>
 
-  <script type="module">
-    import OBR, { buildShape } from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
+      const el = (id) => document.getElementById(id);
 
-    const ID_EXT = "com.gaduarte14.nevoa3em1";
-    const CHAVE_PAREDES = `${ID_EXT}/paredes`;
-    const CHAVE_CONFIG = `${ID_EXT}/config`;
-    const CHAVE_TRACO_BRUTO = `${ID_EXT}/tracoBruto`;
-    const CHAVE_LUZ_SOLTA = `${ID_EXT}/luzSolta`;
-    const CHAVE_TOKEN_CFG = `${ID_EXT}/tokenCfg`;
-    const CHAVE_TOKEN_MEM = `${ID_EXT}/memoria`;
-    const PREFIXO_PREVIA = `${ID_EXT}_previa_`;
+      function atualizarListaJogadores(jogadores = []) {
+        const select = el("selDonoLuz");
+        const valorAtual = lerConfig().donoLuzEscolhido || "AUTO";
 
-    // Elementos da UI
-    const lblTracos = document.getElementById("lblTracos");
-    const lblParedes = document.getElementById("lblParedes");
-    const btnConcluir = document.getElementById("btnConcluir");
-    const btnDesfazerTraco = document.getElementById("btnDesfazerTraco");
-    const btnCancelar = document.getElementById("btnCancelar");
-    const btnApagarParedes = document.getElementById("btnApagarParedes");
+        select.innerHTML = `
+          <option value="AUTO">🤖 Automático (1º jogador que clicar no token)</option>
+          <option value="TODOS">🌐 Todos os Jogadores (Compartilhada)</option>
+        `;
 
-    const chkLinhaReta = document.getElementById("chkLinhaReta");
-    const rngRDP = document.getElementById("rngRDP");
-    const valRDP = document.getElementById("valRDP");
-    const rngAngulo = document.getElementById("rngAngulo");
-    const valAngulo = document.getElementById("valAngulo");
-    const chkDiag45 = document.getElementById("chkDiag45");
-    const chkGrid = document.getElementById("chkGrid");
-    const rngSnap = document.getElementById("rngSnap");
-    const valSnap = document.getElementById("valSnap");
-    const chkMostrarParedes = document.getElementById("chkMostrarParedes");
-    const chkBloquearTokens = document.getElementById("chkBloquearTokens");
+        for (const p of jogadores) {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = `👤 Exclusivo de: ${p.name}`;
+          select.appendChild(opt);
+        }
 
-    const btnCriarLuzCentro = document.getElementById("btnCriarLuzCentro");
-    const corLuzPadrao = document.getElementById("corLuzPadrao");
-    const rngFalloff = document.getElementById("rngFalloff");
-    const valFalloff = document.getElementById("valFalloff");
-    const tituloSelecionado = document.getElementById("tituloSelecionado");
-    const conteudoSelecionado = document.getElementById("conteudoSelecionado");
+        if ([...select.options].some((o) => o.value === valorAtual)) {
+          select.value = valorAtual;
+        }
+      }
 
-    const chkNevoaAtiva = document.getElementById("chkNevoaAtiva");
-    const corNevoaExplorada = document.getElementById("corNevoaExplorada");
-    const rngOpNevoa = document.getElementById("rngOpNevoa");
-    const valOpNevoa = document.getElementById("valOpNevoa");
-    const selVisaoMestre = document.getElementById("selVisaoMestre");
-    const btnLimparMemToken = document.getElementById("btnLimparMemToken");
-    const btnLimparMemTudo = document.getElementById("btnLimparMemTudo");
+      function preencherFormulario() {
+        const cfg = lerConfig();
 
-    let cadeiaCfg = Promise.resolve();
-    const salvarConfig = (p) => (cadeiaCfg = cadeiaCfg.then(() => _salvarConfig(p)).catch(console.error));
-    async function _salvarConfig(parcial) {
-      const meta = await OBR.scene.getMetadata();
-      const atual = meta[CHAVE_CONFIG] || {};
-      await OBR.scene.setMetadata({
-        [CHAVE_CONFIG]: { ...atual, ...parcial }
+        el("inpSimplificacao").value = cfg.simplificacao;
+        el("valSimplificacao").textContent = `${cfg.simplificacao} px`;
+
+        el("inpAngulo").value = cfg.anguloMinimo;
+        el("valAngulo").textContent = `${cfg.anguloMinimo}°`;
+
+        el("inpGrudar").value = cfg.distanciaGrudar;
+        el("valGrudar").textContent = `${cfg.distanciaGrudar} px`;
+
+        el("chkGrudarPontas").checked = Boolean(cfg.grudarPontas);
+        el("chkFecharPoligono").checked = Boolean(cfg.fecharPoligono);
+        el("chkAlinharRetas").checked = Boolean(cfg.alinharRetas);
+        el("chkGrudarGrid").checked = Boolean(cfg.grudarGrid);
+        el("chkMostrarMestre").checked = Boolean(cfg.mostrarParedesMestre);
+
+        // Aba Luzes
+        el("chkVisaoIndividual").checked = Boolean(cfg.visaoIndividual);
+        el("selDonoLuz").value = cfg.donoLuzEscolhido || "AUTO";
+        el("selPresetLuz").value = cfg.presetLuz || "tocha";
+
+        el("inpAlcance").value = cfg.alcanceQuadrados;
+        el("valAlcance").textContent = `${cfg.alcanceQuadrados} q`;
+
+        el("inpRaioFonte").value = cfg.raioFonteQuadrados;
+        el("valRaioFonte").textContent = `${cfg.raioFonteQuadrados} q`;
+
+        el("inpFalloff").value = cfg.falloff;
+        el("valFalloff").textContent = Number(cfg.falloff).toFixed(2);
+
+        el("inpAnguloCone").value = cfg.anguloCone;
+        el("valAnguloCone").textContent = `${cfg.anguloCone}°`;
+
+        // Aba Névoa
+        el("chkMemoriaAtiva").checked = Boolean(cfg.memoriaAtiva);
+        el("selModoMemoria").value = cfg.modoMemoria || "LUZ_SECUNDARIA";
+
+        el("inpRaioMemoria").value = cfg.raioMemoriaQuadrados;
+        el("valRaioMemoria").textContent = `${cfg.raioMemoriaQuadrados} q`;
+
+        el("inpResolucao").value = cfg.resolucaoCelula;
+        el("valResolucao").textContent = `${cfg.resolucaoCelula} q`;
+      }
+
+      el("inpSimplificacao").addEventListener("input", (e) => {
+        salvarConfig({ simplificacao: Number(e.target.value) });
+        preencherFormulario();
       });
-    }
+      el("inpAngulo").addEventListener("input", (e) => {
+        salvarConfig({ anguloMinimo: Number(e.target.value) });
+        preencherFormulario();
+      });
+      el("inpGrudar").addEventListener("input", (e) => {
+        salvarConfig({ distanciaGrudar: Number(e.target.value) });
+        preencherFormulario();
+      });
 
-    // Lê direto do Owlbear quantos traços provisórios e paredes existem
-    async function sincronizarPainel() {
-      if (!(await OBR.scene.isReady())) return;
-      if (document.activeElement?.matches?.("input[type=range]")) return; // não mexe no slider enquanto arrasta
-      const meta = await OBR.scene.getMetadata();
-      const cfg = meta[CHAVE_CONFIG] || {};
-      const paredes = meta[CHAVE_PAREDES]?.segmentos || [];
-      const locais = await OBR.scene.local.getItems();
-      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
+      el("chkGrudarPontas").addEventListener("change", (e) =>
+        salvarConfig({ grudarPontas: e.target.checked })
+      );
+      el("chkFecharPoligono").addEventListener("change", (e) =>
+        salvarConfig({ fecharPoligono: e.target.checked })
+      );
+      el("chkAlinharRetas").addEventListener("change", (e) =>
+        salvarConfig({ alinharRetas: e.target.checked })
+      );
+      el("chkGrudarGrid").addEventListener("change", (e) =>
+        salvarConfig({ grudarGrid: e.target.checked })
+      );
+      el("chkMostrarMestre").addEventListener("change", (e) =>
+        salvarConfig({ mostrarParedesMestre: e.target.checked })
+      );
 
-      lblTracos.textContent = brutos.length;
-      lblParedes.textContent = paredes.length;
+      // Eventos de Luz Individual
+      el("chkVisaoIndividual").addEventListener("change", (e) =>
+        salvarConfig({ visaoIndividual: e.target.checked })
+      );
+      el("selDonoLuz").addEventListener("change", (e) =>
+        salvarConfig({ donoLuzEscolhido: e.target.value })
+      );
 
-      const temBrutos = brutos.length > 0;
-      btnConcluir.disabled = !temBrutos;
-      btnDesfazerTraco.disabled = !temBrutos;
-      btnCancelar.disabled = !temBrutos;
-
-      chkLinhaReta.checked = Boolean(cfg.modoLinhaReta);
-      rngRDP.value = cfg.toleranciaRDP ?? 12;
-      valRDP.textContent = rngRDP.value;
-      rngAngulo.value = cfg.toleranciaAnguloGraus ?? 8;
-      valAngulo.textContent = rngAngulo.value;
-      chkDiag45.checked = cfg.aceitarDiagonais45 !== false;
-      chkGrid.checked = Boolean(cfg.alinharAoGrid);
-      rngSnap.value = cfg.raioSnap ?? 25;
-      valSnap.textContent = rngSnap.value;
-      chkMostrarParedes.checked = cfg.mostrarParedesMestre !== false;
-      chkBloquearTokens.checked = cfg.bloquearMovimentoTokens !== false;
-
-      corLuzPadrao.value = cfg.corLuzPadrao || "#ffe8b6";
-      rngFalloff.value = cfg.falloffPadrao ?? 0.5;
-      valFalloff.textContent = Number(rngFalloff.value).toFixed(2);
-
-      chkNevoaAtiva.checked = cfg.nevoaAtiva !== false;
-      corNevoaExplorada.value = cfg.corNevoaExplorada || "#181822";
-      rngOpNevoa.value = Math.round((cfg.opacidadeNevoaExplorada ?? 0.74) * 100);
-      valOpNevoa.textContent = rngOpNevoa.value;
-      selVisaoMestre.value = cfg.modoVisaoMestre || "TUDO";
-
-      await atualizarCardSelecao();
-    }
-
-    // Concluir paredes: converte as prévias verdes em paredes definitivas da cena!
-    btnConcluir.addEventListener("click", async () => {
-      const locais = await OBR.scene.local.getItems();
-      const previas = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA));
-      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
-
-      const meta = await OBR.scene.getMetadata();
-      const atuais = meta[CHAVE_PAREDES]?.segmentos || [];
-      const novas = [...atuais];
-
-      for (const p of previas) {
-        if (p.points && p.points.length >= 2) {
-          novas.push({
-            id: `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            x1: p.points[0].x,
-            y1: p.points[0].y,
-            x2: p.points[1].x,
-            y2: p.points[1].y,
-            porta: false,
-            aberta: false
+      el("selPresetLuz").addEventListener("change", (e) => {
+        const chave = e.target.value;
+        const preset = PRESETS_LUZ[chave];
+        if (preset) {
+          salvarConfig({
+            presetLuz: chave,
+            alcanceQuadrados: preset.alcanceQuadrados,
+            raioFonteQuadrados: preset.raioFonteQuadrados,
+            falloff: preset.falloff,
+            anguloCone: preset.anguloCone,
+            anguloInterno: preset.anguloInterno,
+            tipoLuz: preset.tipoLuz
           });
+          preencherFormulario();
         }
-      }
-
-      await OBR.scene.local.deleteItems([...previas.map((i) => i.id), ...brutos.map((i) => i.id)]);
-      await OBR.scene.setMetadata({
-        [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas }
       });
-      await OBR.notification.show(`${previas.length} parede(s) concluída(s)!`, "SUCCESS");
-      await sincronizarPainel();
-    });
 
-    btnDesfazerTraco.addEventListener("click", async () => {
-      const locais = await OBR.scene.local.getItems();
-      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
-      if (brutos.length > 0) {
-        await OBR.scene.local.deleteItems([brutos[brutos.length - 1].id]);
-        await salvarConfig({ _at: Date.now() });
-        await sincronizarPainel();
-      }
-    });
+      el("inpAlcance").addEventListener("input", (e) => {
+        salvarConfig({ alcanceQuadrados: Number(e.target.value) });
+        preencherFormulario();
+      });
+      el("inpRaioFonte").addEventListener("input", (e) => {
+        salvarConfig({ raioFonteQuadrados: Number(e.target.value) });
+        preencherFormulario();
+      });
+      el("inpFalloff").addEventListener("input", (e) => {
+        salvarConfig({ falloff: Number(e.target.value) });
+        preencherFormulario();
+      });
+      el("inpAnguloCone").addEventListener("input", (e) => {
+        salvarConfig({ anguloCone: Number(e.target.value) });
+        preencherFormulario();
+      });
 
-    btnCancelar.addEventListener("click", async () => {
-      const locais = await OBR.scene.local.getItems();
-      const ids = locais
-        .filter((i) => i.id.startsWith(PREFIXO_PREVIA) || Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]))
-        .map((i) => i.id);
-      if (ids.length) await OBR.scene.local.deleteItems(ids);
-      await sincronizarPainel();
-    });
+      // Névoa
+      el("chkMemoriaAtiva").addEventListener("change", (e) =>
+        salvarConfig({ memoriaAtiva: e.target.checked })
+      );
+      el("selModoMemoria").addEventListener("change", (e) =>
+        salvarConfig({ modoMemoria: e.target.value })
+      );
+      el("inpRaioMemoria").addEventListener("input", (e) => {
+        salvarConfig({ raioMemoriaQuadrados: Number(e.target.value) });
+        preencherFormulario();
+      });
+      el("inpResolucao").addEventListener("input", (e) => {
+        salvarConfig({ resolucaoCelula: Number(e.target.value) });
+        preencherFormulario();
+      });
 
-    btnApagarParedes.addEventListener("click", async () => {
-      await OBR.scene.setMetadata({ [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: [] } });
-      await OBR.notification.show("Todas as paredes foram apagadas.", "WARNING");
-    });
+      // Botões
+      el("btnConcluir").addEventListener("click", () => enviarMensagem({ tipo: "CONCLUIR_TRACOS" }));
+      el("btnDesfazer").addEventListener("click", () => enviarMensagem({ tipo: "DESFAZER" }));
+      el("btnRefazer").addEventListener("click", () => enviarMensagem({ tipo: "REFAZER" }));
+      el("btnCancelar").addEventListener("click", () => enviarMensagem({ tipo: "CANCELAR_TRACOS" }));
 
-    // Ajustes -> gravam na config da cena (o background reage sozinho)
-    const num = (e) => Number(e.value);
-    const marc = (e) => e.checked;
-    const txt = (e) => e.value;
-    function ligar(el, chave, conv, evento = "input") {
-      el.addEventListener(evento, () => {
-        const v = conv(el);
-        if (el.type === "range") {
-          const lbl = el.parentElement.querySelector("b");
-          if (lbl) lbl.textContent = el.step ? Number(v).toFixed(2) : v;
+      el("btnLimparParedes").addEventListener("click", () => {
+        if (confirm("Tem certeza que deseja apagar todas as paredes desta cena?")) {
+          enviarMensagem({ tipo: "LIMPAR_PAREDES" });
         }
-        salvarConfig({ [chave]: v });
       });
-    }
-    ligar(chkLinhaReta, "modoLinhaReta", marc, "change");
-    ligar(rngRDP, "toleranciaRDP", num);
-    ligar(rngAngulo, "toleranciaAnguloGraus", num);
-    ligar(chkDiag45, "aceitarDiagonais45", marc, "change");
-    ligar(chkGrid, "alinharAoGrid", marc, "change");
-    ligar(rngSnap, "raioSnap", num);
-    ligar(chkMostrarParedes, "mostrarParedesMestre", marc, "change");
-    ligar(chkBloquearTokens, "bloquearMovimentoTokens", marc, "change");
-    ligar(corLuzPadrao, "corLuzPadrao", txt, "change");
-    ligar(rngFalloff, "falloffPadrao", num);
-    ligar(chkNevoaAtiva, "nevoaAtiva", marc, "change");
-    ligar(corNevoaExplorada, "corNevoaExplorada", txt, "change");
-    ligar(rngOpNevoa, "opacidadeNevoaExplorada", (e) => Number(e.value) / 100);
-    ligar(selVisaoMestre, "modoVisaoMestre", txt, "change");
 
-    // Criar [Luz] no centro da tela
-    btnCriarLuzCentro.addEventListener("click", async () => {
-      const cfg = (await OBR.scene.getMetadata())[CHAVE_CONFIG] || {};
-      const w = await OBR.viewport.getWidth();
-      const h = await OBR.viewport.getHeight();
-      const pos = await OBR.viewport.inverseTransformPoint({ x: w / 2, y: h / 2 });
-      const luz = buildShape()
-        .name("Fonte de Luz [Luz]")
-        .shapeType("CIRCLE")
-        .width(42)
-        .height(42)
-        .position(pos)
-        .fillColor("#fde047")
-        .fillOpacity(0.6)
-        .strokeOpacity(0)
-        .visible(false)
-        .layer("PROP")
-        .metadata({
-          [CHAVE_LUZ_SOLTA]: {
-            ativa: true,
-            raioCelulas: 4,
-            cor: cfg.corLuzPadrao || "#ffe8b6",
-            falloff: cfg.falloffPadrao ?? 0.5
+      el("btnExportar").addEventListener("click", () => {
+        enviarMensagem({ tipo: "EXPORTAR_PAREDES" });
+      });
+
+      el("btnImportar").addEventListener("click", () => {
+        el("fileImportar").click();
+      });
+
+      el("fileImportar").addEventListener("change", async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        try {
+          const texto = await file.text();
+          const json = JSON.parse(texto);
+          if (Array.isArray(json.paredes)) {
+            enviarMensagem({ tipo: "IMPORTAR_PAREDES", paredes: json.paredes });
           }
-        })
-        .build();
-      await OBR.scene.items.addItems([luz]);
-      await OBR.player.select([luz.id]);
-    });
-
-    // Card do item selecionado (luz solta ou token)
-    let chaveCard = "";
-    const corOk = (c, pad) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : pad);
-    async function atualizarCardSelecao() {
-      const sel = (await OBR.player.getSelection()) || [];
-      const item = sel.length ? (await OBR.scene.items.getItems([sel[0]]))[0] : null;
-      const luz = item?.metadata?.[CHAVE_LUZ_SOLTA];
-      const tk = item && !luz && item.layer === "CHARACTER" ? item.metadata?.[CHAVE_TOKEN_CFG] || {} : null;
-      const chave = JSON.stringify([item?.id, luz, tk]);
-      if (chave === chaveCard) return;
-      chaveCard = chave;
-
-      if (!luz && !tk) {
-        tituloSelecionado.textContent = "Selecione um Token ou [Luz] no mapa";
-        conteudoSelecionado.innerHTML = "Clique em um Token de jogador ou em uma fonte de [Luz] no mapa para configurar.";
-        return;
-      }
-      const alvo = luz ? CHAVE_LUZ_SOLTA : CHAVE_TOKEN_CFG;
-      const campos = luz
-        ? [
-            ["ativa", "checkbox", "Ligada", luz.ativa !== false],
-            ["raioCelulas", "number", "Raio (células)", luz.raioCelulas ?? 4],
-            ["falloff", "range", "Falloff", luz.falloff ?? 0.5],
-            ["cor", "color", "Cor", corOk(luz.cor, "#ffe8b6")]
-          ]
-        : [
-            ["luzAtiva", "checkbox", "Luz ativa", Boolean(tk.luzAtiva)],
-            ["raioLuz", "number", "Raio da Luz (células)", tk.raioLuz ?? 4],
-            ["visaoAtiva", "checkbox", "Visão ativa", Boolean(tk.visaoAtiva)],
-            ["raioVisao", "number", "Raio da Visão (células)", tk.raioVisao ?? 6]
-          ];
-      tituloSelecionado.textContent = luz ? "Fonte de [Luz] selecionada" : `Token: ${item.name || "sem nome"}`;
-      conteudoSelecionado.innerHTML =
-        campos
-          .map(([k, t, l, v]) => {
-            const extra = t === "number" ? 'min="0.5" step="0.5" style="width:70px"' : t === "range" ? 'min="0" max="1" step="0.05"' : "";
-            const val = t === "checkbox" ? (v ? "checked" : "") : `value="${Number.isFinite(v) || typeof v === "string" ? v : 0}"`;
-            return `<div class="row"><label>${l}</label><input data-k="${k}" data-alvo="${alvo}" type="${t}" ${extra} ${val}></div>`;
-          })
-          .join("") +
-        (luz ? '<button data-apagar class="btn-perigo" style="width:100%">Apagar esta [Luz]</button>' : "");
-    }
-
-    conteudoSelecionado.addEventListener("change", async (e) => {
-      const el = e.target;
-      const k = el.dataset?.k;
-      if (!k) return;
-      const sel = (await OBR.player.getSelection()) || [];
-      if (!sel.length) return;
-      const v = el.type === "checkbox" ? el.checked : el.type === "color" ? el.value : Number(el.value);
-      await OBR.scene.items.updateItems([sel[0]], (itens) => {
-        for (const it of itens) it.metadata[el.dataset.alvo] = { ...(it.metadata[el.dataset.alvo] || {}), [k]: v };
+        } catch {
+          alert("Arquivo JSON inválido.");
+        }
       });
-    });
-    conteudoSelecionado.addEventListener("click", async (e) => {
-      if (!e.target.matches("[data-apagar]")) return;
-      const sel = (await OBR.player.getSelection()) || [];
-      if (sel.length) await OBR.scene.items.deleteItems([sel[0]]);
-    });
 
-    // Limpar memória da névoa
-    async function limparMemoria(ids) {
-      if (!ids.length) return;
-      await OBR.scene.items.updateItems(ids, (itens) => {
-        for (const it of itens) delete it.metadata[CHAVE_TOKEN_MEM];
+      el("btnLuzSelecionados").addEventListener("click", () =>
+        enviarMensagem({ tipo: "APLICAR_LUZ_SELECIONADOS" })
+      );
+      el("btnLimparLuzes").addEventListener("click", () =>
+        enviarMensagem({ tipo: "LIMPAR_LUZES" })
+      );
+
+      el("btnAlternarNevoaCena").addEventListener("click", () =>
+        enviarMensagem({ tipo: "ALTERNAR_NEVOA_CENA" })
+      );
+      el("btnRegistrarAgora").addEventListener("click", () =>
+        enviarMensagem({ tipo: "REGISTRAR_MEMORIA_AGORA" })
+      );
+      el("btnLimparMemoria").addEventListener("click", () =>
+        enviarMensagem({ tipo: "LIMPAR_MEMORIA_NEVOA" })
+      );
+
+      escutarMensagens((msg) => {
+        if (msg.tipo === "ESTADO_CENA" && msg.estado) {
+          const st = msg.estado;
+          el("statusCena").textContent = st.cenaPronta
+            ? st.nevoaPreenchida
+              ? "Cena Ativa • Névoa ON"
+              : "Cena Ativa • Névoa OFF"
+            : "Sem Cena Aberta";
+          el("stParedes").textContent = `${st.paredesSalvas}`;
+          el("stPendentes").textContent = `${st.tracosPendentes}`;
+          el("stLuzes").textContent = `${st.luzesAtivas}`;
+          el("stMemoria").textContent = `${st.celulasMemoria}`;
+
+          if (Array.isArray(st.jogadoresSala)) {
+            atualizarListaJogadores(st.jogadoresSala);
+          }
+        } else if (msg.tipo === "DADOS_EXPORTACAO") {
+          const blob = new Blob([JSON.stringify({ paredes: msg.paredes || [] }, null, 2)], {
+            type: "application/json"
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `paredes-cena-${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
       });
-      await OBR.notification.show("Memória limpa.", "SUCCESS");
-    }
-    btnLimparMemToken.addEventListener("click", async () => limparMemoria((await OBR.player.getSelection()) || []));
-    btnLimparMemTudo.addEventListener("click", async () => {
-      const todos = await OBR.scene.items.getItems((i) => Boolean(i.metadata?.[CHAVE_TOKEN_MEM]));
-      await limparMemoria(todos.map((i) => i.id));
-    });
 
-    // Início: só usa o SDK depois do onReady
-    OBR.onReady(async () => {
-      OBR.scene.onReadyChange(() => sincronizarPainel());
-      OBR.scene.onMetadataChange(() => sincronizarPainel());
-      OBR.scene.local.onChange(() => sincronizarPainel());
-      OBR.scene.items.onChange(() => atualizarCardSelecao());
-      OBR.player.onChange(() => atualizarCardSelecao());
-      await sincronizarPainel();
-    });
-  </script>
-</body>
+      preencherFormulario();
+      enviarMensagem({ tipo: "SOLICITAR_ESTADO" });
+    </script>
+  </body>
 </html>

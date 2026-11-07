@@ -1,1194 +1,1171 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Background - Paredes, Luz e Memória de Névoa</title>
-</head>
-<body>
-  <script type="module">
-    import OBR, {
-      buildCurve,
-      buildPath,
-      buildShape,
-      Command
-    } from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
+  <head>
+    <meta charset="UTF-8" />
+    <title>3 em 1 — Segundo Plano</title>
+  </head>
+  <body>
+    <script type="module">
+      import OBR, {
+        buildWall,
+        buildCurve,
+        buildLight,
+        buildShape
+      } from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
 
-    const ID_EXT = "com.gaduarte14.nevoa3em1";
-    const CHAVE_PAREDES = `${ID_EXT}/paredes`;
-    const CHAVE_CONFIG = `${ID_EXT}/config`;
-    const CHAVE_TRACO_BRUTO = `${ID_EXT}/tracoBruto`;
-    const CHAVE_LUZ_SOLTA = `${ID_EXT}/luzSolta`;
-    const CHAVE_TOKEN_CFG = `${ID_EXT}/tokenCfg`;
-    const CHAVE_TOKEN_MEM = `${ID_EXT}/memoria`;
+      import {
+        NS,
+        lerConfig,
+        enviarMensagem,
+        escutarMensagens,
+        distancia,
+        distanciaPontoSegmento,
+        processarTraco,
+        temVisadaLivre,
+        lerParedesDaCena,
+        criarPatchMetadadosParedes,
+        lerMemoriaLocalJogador,
+        salvarMemoriaLocalJogador
+      } from "./core.js";
 
-    const ID_TRACO_ARRASTO = `${ID_EXT}_arrasto_ativo`;
-    const ID_PONTO1_RETA = `${ID_EXT}_ponto1_reta`;
-    const PREFIXO_PREVIA = `${ID_EXT}_previa_`;
-    const PREFIXO_PAREDE_GM = `${ID_EXT}_parede_gm_`;
-    const PREFIXO_RENDER_LUZ = `${ID_EXT}_luz_render_`;
-    const PREFIXO_MARCADOR_LUZ = `${ID_EXT}_luz_gm_`;
-    const ID_NEVOA_EXPLORADA = `${ID_EXT}_nevoa_explorada`;
-    const ID_NEVOA_ESCURIDAO = `${ID_EXT}_nevoa_escuridao`;
+      const svgUri = (conteudo) =>
+        `data:image/svg+xml;utf8,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${conteudo}</svg>`
+        )}`;
 
-    const CONFIG_PADRAO = {
-      versao: 1,
-      // Parte A: Paredes
-      toleranciaRDP: 12,
-      toleranciaAnguloGraus: 8,
-      aceitarDiagonais45: true,
-      alinharAoGrid: false,
-      passoGridMeiaCelula: true,
-      raioSnap: 25,
-      comprimentoMinimoSegmento: 16,
-      modoLinhaReta: false,
-      mostrarParedesMestre: true,
-      bloquearMovimentoTokens: true,
-      // Parte B: Luz com Falloff
-      falloffPadrao: 0.5,
-      corLuzPadrao: "#ffe8b6",
-      passosGradienteLuz: 14,
-      // Parte C: Névoa 3 estados e Memória
-      nevoaAtiva: true,
-      corNevoaExplorada: "#181822",
-      opacidadeNevoaExplorada: 0.74,
-      fatorCelulaMemoria: 0.5,
-      ocultarTokensNaNevoa: true,
-      modoVisaoMestre: "TUDO" // "TUDO" | "PLAYERS" | id do token
-    };
-
-    // =========================================================================
-    // 1. GEOMETRIA 2D DAS PAREDES (5 Etapas)
-    // =========================================================================
-    function distancia(a, b) {
-      return Math.hypot(b.x - a.x, b.y - a.y);
-    }
-
-    function comprimentoTraco(pts) {
-      let t = 0;
-      for (let i = 1; i < pts.length; i++) t += distancia(pts[i - 1], pts[i]);
-      return t;
-    }
-
-    function distanciaPontoReta(p, a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const c2 = dx * dx + dy * dy;
-      if (c2 === 0) return distancia(p, a);
-      return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / Math.sqrt(c2);
-    }
-
-    function projetarPontoNoSegmento(p, a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const c2 = dx * dx + dy * dy;
-      if (c2 === 0) return { x: a.x, y: a.y, t: 0, dist: distancia(p, a) };
-      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / c2));
-      const proj = { x: a.x + t * dx, y: a.y + t * dy };
-      return { ...proj, t, dist: distancia(p, proj) };
-    }
-
-    function mudancaAnguloGraus(a, b, c) {
-      const a1 = Math.atan2(b.y - a.y, b.x - a.x);
-      const a2 = Math.atan2(c.y - b.y, c.x - b.x);
-      let d = Math.abs(a2 - a1) * (180 / Math.PI);
-      return d > 180 ? 360 - d : d;
-    }
-
-    function etapa1Limpar(pts, compMin = 16) {
-      if (!pts || pts.length < 2) return [];
-      const limpos = [{ x: pts[0].x, y: pts[0].y }];
-      for (let i = 1; i < pts.length; i++) {
-        if (distancia(pts[i], limpos[limpos.length - 1]) >= 2) {
-          limpos.push({ x: pts[i].x, y: pts[i].y });
-        }
-      }
-      if (limpos.length < 2 || comprimentoTraco(limpos) < compMin) return [];
-      if (limpos.length <= 3) return limpos;
-
-      const suav = [limpos[0]];
-      for (let i = 1; i < limpos.length - 1; i++) {
-        if (mudancaAnguloGraus(limpos[i - 1], limpos[i], limpos[i + 1]) > 28) {
-          suav.push({ x: limpos[i].x, y: limpos[i].y });
-        } else {
-          suav.push({
-            x: limpos[i - 1].x * 0.25 + limpos[i].x * 0.5 + limpos[i + 1].x * 0.25,
-            y: limpos[i - 1].y * 0.25 + limpos[i].y * 0.5 + limpos[i + 1].y * 0.25
-          });
-        }
-      }
-      suav.push(limpos[limpos.length - 1]);
-      return suav;
-    }
-
-    function etapa2SimplificarRDP(pts, tol = 12) {
-      if (pts.length <= 2) return pts.slice();
-      let maxD = 0;
-      let idx = 0;
-      for (let i = 1; i < pts.length - 1; i++) {
-        const d = distanciaPontoReta(pts[i], pts[0], pts[pts.length - 1]);
-        if (d > maxD) {
-          maxD = d;
-          idx = i;
-        }
-      }
-      if (maxD > tol) {
-        const esq = etapa2SimplificarRDP(pts.slice(0, idx + 1), tol);
-        const dir = etapa2SimplificarRDP(pts.slice(idx), tol);
-        return esq.slice(0, -1).concat(dir);
-      }
-      return [{ x: pts[0].x, y: pts[0].y }, { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y }];
-    }
-
-    function alinharAoGridValor(v, dpi, meia = true) {
-      const passo = meia ? dpi * 0.5 : dpi;
-      return Math.round(v / passo) * passo;
-    }
-
-    function etapa3Endireitar(pts, cfg, dpi = 150) {
-      if (pts.length < 2) return pts;
-      const tol = Number(cfg.toleranciaAnguloGraus ?? 8);
-      const usar45 = Boolean(cfg.aceitarDiagonais45);
-      const res = pts.map((p) => ({ x: p.x, y: p.y }));
-
-      for (let i = 0; i < res.length - 1; i++) {
-        const a = res[i];
-        const b = res[i + 1];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const absA = Math.abs(Math.atan2(dy, dx) * (180 / Math.PI));
-
-        if (absA <= tol || Math.abs(absA - 180) <= tol) {
-          b.y = a.y;
-        } else if (Math.abs(absA - 90) <= tol) {
-          b.x = a.x;
-        } else if (usar45 && (Math.abs(absA - 45) <= tol || Math.abs(absA - 135) <= tol)) {
-          const m = (Math.abs(dx) + Math.abs(dy)) * 0.5;
-          b.x = a.x + Math.sign(dx || 1) * m;
-          b.y = a.y + Math.sign(dy || 1) * m;
-        }
-      }
-
-      if (cfg.alinharAoGrid) {
-        for (const p of res) {
-          p.x = alinharAoGridValor(p.x, dpi, cfg.passoGridMeiaCelula);
-          p.y = alinharAoGridValor(p.y, dpi, cfg.passoGridMeiaCelula);
-        }
-      }
-      return res;
-    }
-
-    function etapa4GrudarEFechar(tracos, paredesExistentes, raioSnap = 25) {
-      let atuais = paredesExistentes.map((p) => ({ ...p }));
-      const novos = [];
-
-      function grudar(pt, lista) {
-        let melhor = null;
-        let menD = raioSnap;
-        for (const par of lista) {
-          const d1 = distancia(pt, { x: par.x1, y: par.y1 });
-          if (d1 <= menD) {
-            menD = d1;
-            melhor = { x: par.x1, y: par.y1 };
-          }
-          const d2 = distancia(pt, { x: par.x2, y: par.y2 });
-          if (d2 <= menD) {
-            menD = d2;
-            melhor = { x: par.x2, y: par.y2 };
-          }
-        }
-        if (melhor) return melhor;
-
-        for (let i = 0; i < lista.length; i++) {
-          const par = lista[i];
-          const proj = projetarPontoNoSegmento(pt, { x: par.x1, y: par.y1 }, { x: par.x2, y: par.y2 });
-          if (proj.t > 0.05 && proj.t < 0.95 && proj.dist <= raioSnap) {
-            return { x: proj.x, y: proj.y };
-          }
-        }
-        return { x: pt.x, y: pt.y };
-      }
-
-      for (const ptsOrig of tracos) {
-        if (ptsOrig.length < 2) continue;
-        const pts = ptsOrig.map((p) => ({ x: p.x, y: p.y }));
-        if (pts.length >= 3 && distancia(pts[0], pts[pts.length - 1]) <= raioSnap * 1.3) {
-          pts[pts.length - 1] = { x: pts[0].x, y: pts[0].y };
-        } else {
-          const todas = atuais.concat(novos);
-          pts[0] = grudar(pts[0], todas);
-          pts[pts.length - 1] = grudar(pts[pts.length - 1], todas);
-        }
-        for (let i = 0; i < pts.length - 1; i++) {
-          novos.push({
-            id: `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${i}`,
-            x1: pts[i].x,
-            y1: pts[i].y,
-            x2: pts[i + 1].x,
-            y2: pts[i + 1].y,
-            porta: false,
-            aberta: false
-          });
-        }
-      }
-      return { novosSegmentos: novos, todas: atuais.concat(novos) };
-    }
-
-    function etapa5LimpezaFinal(segs, compMin = 16) {
-      const filt = segs.filter((s) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= Math.max(4, compMin * 0.5));
-      const unicos = [];
-      const chaves = new Set();
-      for (const s of filt) {
-        const p1 = `${Math.round(s.x1)},${Math.round(s.y1)}`;
-        const p2 = `${Math.round(s.x2)},${Math.round(s.y2)}`;
-        const ch = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
-        if (!chaves.has(ch)) {
-          chaves.add(ch);
-          unicos.push(s);
-        }
-      }
-      return unicos;
-    }
-
-    function organizarTracosParede(tracosBrutos, paredesExistentes, cfg, dpi = 150) {
-      const proc = [];
-      for (const t of tracosBrutos) {
-        if (t.linhaReta && t.pontos.length === 2) {
-          proc.push(etapa3Endireitar(t.pontos, cfg, dpi));
-          continue;
-        }
-        const l = etapa1Limpar(t.pontos, cfg.comprimentoMinimoSegmento);
-        if (l.length < 2) continue;
-        const s = etapa2SimplificarRDP(l, cfg.toleranciaRDP);
-        proc.push(etapa3Endireitar(s, cfg, dpi));
-      }
-      const { novosSegmentos } = etapa4GrudarEFechar(proc, paredesExistentes, cfg.raioSnap);
-      return etapa5LimpezaFinal(novosSegmentos, cfg.comprimentoMinimoSegmento);
-    }
-
-    function segmentosSeCruzam(a, b, c, d) {
-      const ccw = (p1, p2, p3) => (p3.y - p1.y) * (p2.x - p1.x) > (p2.y - p1.y) * (p3.x - p1.x);
-      return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
-    }
-
-    // =========================================================================
-    // 2. VISIBILIDADE 2D, LUZ COM FALLOFF E MEMÓRIA DE NÉVOA (3 ESTADOS)
-    // =========================================================================
-    function intersecaoRaioSegmento(ox, oy, dx, dy, x1, y1, x2, y2) {
-      const sx = x2 - x1;
-      const sy = y2 - y1;
-      const den = dx * sy - dy * sx;
-      if (Math.abs(den) < 1e-8) return null;
-      const t = ((x1 - ox) * sy - (y1 - oy) * sx) / den;
-      const u = ((x1 - ox) * dy - (y1 - oy) * dx) / den;
-      return t >= 0 && u >= -1e-4 && u <= 1.0001 ? t : null;
-    }
-
-    function calcularPoligonoVisibilidade(origem, raio, paredes, passos = 44) {
-      if (raio <= 0) return [];
-      const ox = origem.x;
-      const oy = origem.y;
-      const locais = paredes.filter((p) => {
-        if (p.aberta) return false;
-        return !(
-          Math.max(p.x1, p.x2) < ox - raio ||
-          Math.min(p.x1, p.x2) > ox + raio ||
-          Math.max(p.y1, p.y2) < oy - raio ||
-          Math.min(p.y1, p.y2) > oy + raio
-        );
-      });
-
-      if (locais.length === 0) {
-        const circ = [];
-        for (let i = 0; i < passos; i++) {
-          const a = (i / passos) * Math.PI * 2;
-          circ.push({ x: ox + Math.cos(a) * raio, y: oy + Math.sin(a) * raio });
-        }
-        return circ;
-      }
-
-      const angs = [];
-      for (let i = 0; i < passos; i++) {
-        angs.push((i / passos) * Math.PI * 2 - Math.PI);
-      }
-      const eps = 0.0002;
-      const r2 = raio * raio * 1.25;
-      for (const p of locais) {
-        if ((p.x1 - ox) ** 2 + (p.y1 - oy) ** 2 <= r2) {
-          const a = Math.atan2(p.y1 - oy, p.x1 - ox);
-          angs.push(a - eps, a, a + eps);
-        }
-        if ((p.x2 - ox) ** 2 + (p.y2 - oy) ** 2 <= r2) {
-          const a = Math.atan2(p.y2 - oy, p.x2 - ox);
-          angs.push(a - eps, a, a + eps);
-        }
-      }
-      angs.sort((a, b) => a - b);
-
-      const poly = [];
-      for (let i = 0; i < angs.length; i++) {
-        if (i > 0 && Math.abs(angs[i] - angs[i - 1]) < 1e-5) continue;
-        const dx = Math.cos(angs[i]);
-        const dy = Math.sin(angs[i]);
-        let menT = raio;
-        for (const p of locais) {
-          const t = intersecaoRaioSegmento(ox, oy, dx, dy, p.x1, p.y1, p.x2, p.y2);
-          if (t !== null && t < menT) menT = t;
-        }
-        poly.push({ x: ox + dx * menT, y: oy + dy * menT });
-      }
-      return poly;
-    }
-
-    function recortarPoligonoNoRaio(poly, origem, rAlvo) {
-      return poly.map((pt) => {
-        const vx = pt.x - origem.x;
-        const vy = pt.y - origem.y;
-        const d = Math.hypot(vx, vy);
-        if (d <= rAlvo || d === 0) return { x: pt.x, y: pt.y };
-        const esc = rAlvo / d;
-        return { x: origem.x + vx * esc, y: origem.y + vy * esc };
-      });
-    }
-
-    function pontoDentroPoligono(pt, poly) {
-      if (!poly || poly.length < 3) return false;
-      let dentro = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const xi = poly[i].x, yi = poly[i].y;
-        const xj = poly[j].x, yj = poly[j].y;
-        if (yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-12) + xi) {
-          dentro = !dentro;
-        }
-      }
-      return dentro;
-    }
-
-    function poligonoParaComandos(poly) {
-      if (!poly || poly.length < 3) return [];
-      const cmds = [[Command.MOVE, poly[0].x, poly[0].y]];
-      for (let i = 1; i < poly.length; i++) cmds.push([Command.LINE, poly[i].x, poly[i].y]);
-      cmds.push([Command.CLOSE]);
-      return cmds;
-    }
-
-    // Intensidade suave (1 - d^2)^(1 + 3*falloff) -> zero corte seco em d = 1
-    function calcularIntensidadeFalloff(d, falloff = 0.5) {
-      if (d >= 1) return 0;
-      if (d <= 0) return 1;
-      const exp = 1.0 + Math.max(0, Math.min(1, falloff)) * 3.0;
-      return Math.pow(1 - d * d, exp);
-    }
-
-    // FUNÇÃO ÚNICA DE LUZ COM FALLOFF (usada por tokens e por luzes soltas)
-    function gerarItensLuzFalloff(idBase, origem, raioPx, cor, falloff, polyVis, numPassos = 14) {
-      if (!polyVis || polyVis.length < 3 || raioPx <= 0) return [];
-      const opMax = 0.35;
-      const itens = [];
-      for (let k = numPassos; k >= 1; k--) {
-        const dExt = k / numPassos;
-        const dInt = (k - 1) / numPassos;
-        const deltaOp =
-          (calcularIntensidadeFalloff(dInt, falloff) - calcularIntensidadeFalloff(dExt, falloff)) *
-          opMax;
-        if (deltaOp <= 0.001) continue;
-
-        const polyCamada =
-          k === numPassos ? polyVis : recortarPoligonoNoRaio(polyVis, origem, raioPx * dExt);
-        const cmds = poligonoParaComandos(polyCamada);
-        if (!cmds.length) continue;
-
-        itens.push(
-          buildPath()
-            .id(`${PREFIXO_RENDER_LUZ}${idBase}_${k}`)
-            .name("Luz com Falloff")
-            .commands(cmds)
-            .fillColor(cor || "#ffe8b6")
-            .fillOpacity(deltaOp)
-            .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(100 + (numPassos - k))
-            .locked(true)
-            .disableHit(true)
-            .build()
-        );
-      }
-      return itens;
-    }
-
-    // Compressão RLE + Base64 da grade de memória por token
-    function comprimirRLE(bitset) {
-      const rle = [];
-      let i = 0;
-      while (i < bitset.length) {
-        const v = bitset[i];
-        let c = 1;
-        while (i + c < bitset.length && bitset[i + c] === v && c < 255) c++;
-        rle.push(c, v);
-        i += c;
-      }
-      let bin = "";
-      for (let j = 0; j < rle.length; j++) bin += String.fromCharCode(rle[j]);
-      return btoa(bin);
-    }
-
-    function descomprimirRLE(b64, tamBytes) {
-      const res = new Uint8Array(tamBytes);
-      if (!b64) return res;
-      try {
-        const bin = atob(b64);
-        let out = 0;
-        for (let i = 0; i < bin.length; i += 2) {
-          const c = bin.charCodeAt(i);
-          const v = bin.charCodeAt(i + 1);
-          for (let k = 0; k < c && out < res.length; k++) res[out++] = v;
-        }
-      } catch (_) {}
-      return res;
-    }
-
-    function calcularGradeCena(itensCena, dpi, fator = 0.5) {
-      const celPx = Math.max(30, Math.round(dpi * fator));
-      let minX = -2500, minY = -2500, maxX = 2500, maxY = 2500;
-      const mapas = itensCena.filter((i) => i.layer === "MAP");
-      if (mapas.length > 0) {
-        minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
-        for (const m of mapas) {
-          const w = (m.image?.width || 2000) * (m.scale?.x || 1);
-          const h = (m.image?.height || 2000) * (m.scale?.y || 1);
-          minX = Math.min(minX, m.position.x - w);
-          minY = Math.min(minY, m.position.y - h);
-          maxX = Math.max(maxX, m.position.x + w * 2);
-          maxY = Math.max(maxY, m.position.y + h * 2);
-        }
-      }
-      minX = Math.floor(minX / celPx) * celPx;
-      minY = Math.floor(minY / celPx) * celPx;
-      const cols = Math.min(180, Math.max(20, Math.ceil((maxX - minX) / celPx)));
-      const lins = Math.min(180, Math.max(20, Math.ceil((maxY - minY) / celPx)));
-      return {
-        origemX: minX,
-        origemY: minY,
-        celPx,
-        cols,
-        lins,
-        largura: cols * celPx,
-        altura: lins * celPx,
-        tamBytes: Math.ceil((cols * lins) / 8)
+      const ICONES = {
+        parede: svgUri(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 16h18M9 4v6M15 10v6M9 16v4"/>`),
+        lapis: svgUri(`<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>`),
+        linha: svgUri(`<circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.5 17.5 17.5 6.5"/>`),
+        porta: svgUri(`<path d="M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14"/><path d="M2 20h20"/><path d="M14 12v.01"/>`),
+        borracha: svgUri(`<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>`),
+        concluir: svgUri(`<polyline points="20 6 9 17 4 12"/>`),
+        desfazer: svgUri(`<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>`),
+        refazer: svgUri(`<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>`),
+        cancelar: svgUri(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`),
+        luz: svgUri(`<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`),
+        cone: svgUri(`<path d="M3 12h2l7-8v16l-7-8H3z"/><path d="M16 8c1.5 1.5 1.5 6.5 0 8"/>`),
+        apagarLuz: svgUri(`<line x1="2" y1="2" x2="22" y2="22"/><path d="M12 6a6 6 0 0 1 6 6c0 1.3-.4 2.5-1.1 3.5"/><path d="M8.5 8.5A6 6 0 0 0 12 18"/>`)
       };
-    }
 
-    function converterBitsetParaFuros(bitset, grade) {
-      const cmds = [];
-      const vis = new Uint8Array(grade.cols * grade.lins);
-      const ler = (idx) => (bitset[idx >> 3] & (1 << (idx & 7))) !== 0;
+      const META_LUZ_TOKEN = `${NS}/luzConfig`;
 
-      for (let r = 0; r < grade.lins; r++) {
-        for (let c = 0; c < grade.cols; c++) {
-          const idx = r * grade.cols + c;
-          if (vis[idx] || !ler(idx)) continue;
-          let w = 1;
-          while (c + w < grade.cols && !vis[r * grade.cols + c + w] && ler(r * grade.cols + c + w)) w++;
-          let h = 1;
-          let ok = true;
-          while (r + h < grade.lins && ok) {
-            for (let k = 0; k < w; k++) {
-              const t = (r + h) * grade.cols + c + k;
-              if (vis[t] || !ler(t)) {
-                ok = false;
-                break;
-              }
-            }
-            if (ok) h++;
-          }
-          for (let dy = 0; dy < h; dy++) {
-            for (let dx = 0; dx < w; dx++) vis[(r + dy) * grade.cols + c + dx] = 1;
-          }
-          const x1 = grade.origemX + c * grade.celPx;
-          const y1 = grade.origemY + r * grade.celPx;
-          const x2 = x1 + w * grade.celPx;
-          const y2 = y1 + h * grade.celPx;
-          cmds.push(
-            [Command.MOVE, x1, y1],
-            [Command.LINE, x2, y1],
-            [Command.LINE, x2, y2],
-            [Command.LINE, x1, y2],
-            [Command.CLOSE]
-          );
-        }
-      }
-      return cmds;
-    }
+      let config = lerConfig();
+      let meuPlayerId = "";
+      let meuNome = "";
+      let souMestre = false;
+      let cenaPronta = false;
+      let gridDpi = 150;
 
-    // =========================================================================
-    // 3. MOTOR DE ATUALIZAÇÃO EM SEGUNDO PLANO
-    // =========================================================================
-    let tracoAtivo = null;
-    let ponto1Reta = null;
-    let atualizandoArrasto = false;
-    let timerGravarMemoria = null;
-    const ultimasPosicoesTokens = new Map();
+      let paredesCena = [];
+      let versaoAplicada = -1;
 
-    // Fila: só uma atualização roda por vez (evita erro de ID duplicado) e erros aparecem no console
-    let filaTrabalho = Promise.resolve();
-    function naFila(fn) {
-      filaTrabalho = filaTrabalho.then(fn).catch((e) => console.error("[névoa]", e));
-      return filaTrabalho;
-    }
-    const atualizarPreviaTracosLocais = () => naFila(_atualizarPreviaTracosLocais);
-    const recalcularTudoNaCena = () => naFila(_recalcularTudoNaCena);
+      let pontosAtuais = [];
+      let pontoInicialLinha = null;
+      let tracosPendentes = [];
+      let tracosDesfeitos = [];
 
-    async function obterConfigCena() {
-      const meta = await OBR.scene.getMetadata();
-      return { ...CONFIG_PADRAO, ...(meta[CHAVE_CONFIG] || {}) };
-    }
+      let historicoCena = [];
+      let futuroCena = [];
 
-    async function obterParedesCena() {
-      const meta = await OBR.scene.getMetadata();
-      return meta[CHAVE_PAREDES]?.segmentos || [];
-    }
+      // IDs de itens locais (exclusivos da tela deste jogador)
+      let idsParedesLocais = [];
+      let idsRascunhoLocais = [];
+      let idsLuzesLocais = [];
+      let idsMemoriaLocais = [];
 
-    // Atualiza a prévia verde em cima dos traços azuis pendentes
-    async function _atualizarPreviaTracosLocais() {
-      const locais = await OBR.scene.local.getItems();
-      const antigosPrevia = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA)).map((i) => i.id);
-      if (antigosPrevia.length > 0) await OBR.scene.local.deleteItems(antigosPrevia);
+      let celulasVisitadas = new Set();
+      let timerMemoria = null;
 
-      const brutos = locais
-        .filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]))
-        .map((i) => i.metadata[CHAVE_TRACO_BRUTO]);
-
-      if (brutos.length === 0) return;
-
-      const cfg = await obterConfigCena();
-      const dpi = await OBR.scene.grid.getDpi();
-      const paredes = await obterParedesCena();
-      const organizados = organizarTracosParede(brutos, paredes, cfg, dpi);
-      const espessura = Math.max(10, Math.round(dpi * 0.07));
-
-      const novosItens = organizados.map((seg, idx) =>
-        buildCurve()
-          .id(`${PREFIXO_PREVIA}${idx}`)
-          .name("Prévia Parede Organizada")
-          .points([
-            { x: seg.x1, y: seg.y1 },
-            { x: seg.x2, y: seg.y2 }
-          ])
-          .tension(0)
-          .strokeColor("#a3e635")
-          .strokeWidth(espessura)
-          .strokeOpacity(1)
-          .fillOpacity(0)
-          .layer("CONTROL")
-          .zIndex(99999)
-          .locked(true)
-          .disableHit(true)
-          .build()
-      );
-
-      if (novosItens.length > 0) await OBR.scene.local.addItems(novosItens);
-    }
-
-    // Renderiza paredes laranjas para o Mestre + Luzes com Falloff + Névoa de 3 Estados
-    async function _recalcularTudoNaCena() {
-      if (!(await OBR.scene.isReady())) return;
-
-      const role = await OBR.player.getRole();
-      const playerId = await OBR.player.getId();
-      const selecao = (await OBR.player.getSelection()) || [];
-      const dpi = await OBR.scene.grid.getDpi();
-      const cfg = await obterConfigCena();
-      const paredes = await obterParedesCena();
-      const itensCena = await OBR.scene.items.getItems();
-
-      // 1. Limpar itens locais antigos gerados pelo motor
-      const locaisAtuais = await OBR.scene.local.getItems();
-      const idsParaRemover = locaisAtuais
-        .filter(
-          (i) =>
-            i.id.startsWith(PREFIXO_PAREDE_GM) ||
-            i.id.startsWith(PREFIXO_RENDER_LUZ) ||
-            i.id.startsWith(PREFIXO_MARCADOR_LUZ) ||
-            i.id === ID_NEVOA_EXPLORADA ||
-            i.id === ID_NEVOA_ESCURIDAO
-        )
-        .map((i) => i.id);
-
-      if (idsParaRemover.length > 0) {
-        await OBR.scene.local.deleteItems(idsParaRemover);
-      }
-
-      const novosLocais = [];
-
-      // 2. Desenhar Paredes Laranjas para o Mestre (na camada CONTROL para nunca sumir!)
-      if (role === "GM" && cfg.mostrarParedesMestre && paredes.length > 0) {
-        const espParede = Math.max(8, Math.round(dpi * 0.06));
-        for (const p of paredes) {
-          novosLocais.push(
-            buildCurve()
-              .id(`${PREFIXO_PAREDE_GM}${p.id}`)
-              .name("Parede (Mestre)")
-              .points([
-                { x: p.x1, y: p.y1 },
-                { x: p.x2, y: p.y2 }
-              ])
-              .tension(0)
-              .strokeColor(p.porta ? "#38bdf8" : "#ff6b00")
-              .strokeWidth(espParede)
-              .strokeOpacity(0.95)
-              .strokeDash(p.porta ? [14, 8] : [])
-              .fillOpacity(0)
-              .layer("CONTROL")
-              .zIndex(90000)
-              .locked(true)
-              .disableHit(true)
-              .build()
-          );
-        }
-      }
-
-      // 3. Coletar Fontes de Luz Soltas [Luz] + Tokens com Luz/Visão
-      const luzesSoltas = itensCena.filter((i) => Boolean(i.metadata?.[CHAVE_LUZ_SOLTA]));
-      const tokens = itensCena.filter((i) => i.layer === "CHARACTER");
-      const poligonosLuzAtivos = [];
-
-      // 3a. Luzes soltas da ferramenta [Luz]
-      for (const itemLuz of luzesSoltas) {
-        const lCfg = itemLuz.metadata[CHAVE_LUZ_SOLTA];
-        if (lCfg.ativa) {
-          const rPx = (lCfg.raioCelulas || 4) * dpi;
-          const poly = calcularPoligonoVisibilidade(itemLuz.position, rPx, paredes);
-          poligonosLuzAtivos.push(poly);
-          novosLocais.push(
-            ...gerarItensLuzFalloff(
-              itemLuz.id,
-              itemLuz.position,
-              rPx,
-              lCfg.cor || cfg.corLuzPadrao,
-              lCfg.falloff ?? cfg.falloffPadrao,
-              poly,
-              cfg.passosGradienteLuz
-            )
-          );
-        }
-
-        // Marcador visível só para o Mestre
-        if (role === "GM") {
-          novosLocais.push(
-            buildShape()
-              .id(`${PREFIXO_MARCADOR_LUZ}${itemLuz.id}`)
-              .shapeType("CIRCLE")
-              .width(28)
-              .height(28)
-              .position(itemLuz.position)
-              .fillColor(lCfg.ativa ? lCfg.cor || "#fde047" : "#64748b")
-              .fillOpacity(0.9)
-              .strokeColor("#ffffff")
-              .strokeWidth(3)
-              .layer("CONTROL")
-              .zIndex(95000)
-              .locked(true)
-              .disableHit(true)
-              .build()
-          );
-          if (selecao.includes(itemLuz.id)) {
-            const rPx = (lCfg.raioCelulas || 4) * dpi;
-            novosLocais.push(
-              buildShape()
-                .id(`${PREFIXO_MARCADOR_LUZ}anel_${itemLuz.id}`)
-                .shapeType("CIRCLE")
-                .width(rPx * 2)
-                .height(rPx * 2)
-                .position(itemLuz.position)
-                .fillOpacity(0)
-                .strokeColor("#fde047")
-                .strokeWidth(3)
-                .strokeDash([12, 8])
-                .layer("CONTROL")
-                .zIndex(94999)
-                .locked(true)
-                .disableHit(true)
-                .build()
-            );
-          }
-        }
-      }
-
-      // 3b. Tokens com Luz própria
-      for (const tk of tokens) {
-        const tCfg = tk.metadata?.[CHAVE_TOKEN_CFG];
-        if (tCfg?.luzAtiva) {
-          const rPx = (tCfg.raioLuz || 4) * dpi;
-          const poly = calcularPoligonoVisibilidade(tk.position, rPx, paredes);
-          poligonosLuzAtivos.push(poly);
-          novosLocais.push(
-            ...gerarItensLuzFalloff(
-              tk.id,
-              tk.position,
-              rPx,
-              tCfg.corLuz || cfg.corLuzPadrao,
-              tCfg.falloffLuz ?? cfg.falloffPadrao,
-              poly,
-              cfg.passosGradienteLuz
-            )
-          );
-        }
-      }
-
-      // 4. Memória de Névoa de 3 Estados
-      if (cfg.nevoaAtiva) {
-        const grade = calcularGradeCena(itensCena, dpi, cfg.fatorCelulaMemoria);
-        const bitsetUniao = new Uint8Array(grade.tamBytes);
-        const poligonosVisiveisAgora = [...poligonosLuzAtivos];
-        const memoriasModificadas = [];
-
-        // Filtra quais tokens contam para a visão atual deste cliente
-        const tokensVisaoCliente = tokens.filter((tk) => {
-          const tCfg = tk.metadata?.[CHAVE_TOKEN_CFG];
-          if (!tCfg || (!tCfg.luzAtiva && !tCfg.visaoAtiva)) return false;
-          if (role === "GM") {
-            if (cfg.modoVisaoMestre === "TUDO" || cfg.modoVisaoMestre === "PLAYERS") return true;
-            return tk.id === cfg.modoVisaoMestre;
-          }
-          return tk.createdUserId === playerId || tCfg.compartilharVisao;
-        });
-
-        for (const tk of tokensVisaoCliente) {
-          const tCfg = tk.metadata[CHAVE_TOKEN_CFG];
-          const rLuzPx = tCfg.luzAtiva ? (tCfg.raioLuz || 4) * dpi : 0;
-          const rVisPx = tCfg.visaoAtiva ? (tCfg.raioVisao || 6) * dpi : 0;
-          const rMaxPx = Math.max(rLuzPx, rVisPx);
-
-          const polyVisao = calcularPoligonoVisibilidade(tk.position, rMaxPx, paredes);
-          poligonosVisiveisAgora.push(polyVisao);
-
-          const memSalva = tk.metadata?.[CHAVE_TOKEN_MEM];
-          const bitsetTk = descomprimirRLE(memSalva?.b64, grade.tamBytes);
-
-          // Marca células vistas pelo token na memória dele
-          let mudou = false;
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const pt of polyVisao) {
-            if (pt.x < minX) minX = pt.x;
-            if (pt.y < minY) minY = pt.y;
-            if (pt.x > maxX) maxX = pt.x;
-            if (pt.y > maxY) maxY = pt.y;
-          }
-          const cIni = Math.max(0, Math.floor((minX - grade.origemX) / grade.celPx));
-          const cFim = Math.min(grade.cols - 1, Math.ceil((maxX - grade.origemX) / grade.celPx));
-          const lIni = Math.max(0, Math.floor((minY - grade.origemY) / grade.celPx));
-          const lFim = Math.min(grade.lins - 1, Math.ceil((maxY - grade.origemY) / grade.celPx));
-
-          for (let r = lIni; r <= lFim; r++) {
-            const cy = grade.origemY + (r + 0.5) * grade.celPx;
-            for (let c = cIni; c <= cFim; c++) {
-              const idx = r * grade.cols + c;
-              if ((bitsetTk[idx >> 3] & (1 << (idx & 7))) !== 0) continue;
-              const cx = grade.origemX + (c + 0.5) * grade.celPx;
-              const m = grade.celPx * 0.45;
-              const tocou = [[0, 0], [-m, -m], [m, -m], [-m, m], [m, m]].some(([ox, oy]) =>
-                pontoDentroPoligono({ x: cx + ox, y: cy + oy }, polyVisao)
-              );
-              if (tocou) {
-                bitsetTk[idx >> 3] |= 1 << (idx & 7);
-                mudou = true;
-              }
-            }
-          }
-
-          for (let b = 0; b < grade.tamBytes; b++) bitsetUniao[b] |= bitsetTk[b];
-
-          if (mudou && role === "GM") {
-            memoriasModificadas.push({ id: tk.id, b64: comprimirRLE(bitsetTk) });
-          }
-        }
-
-        // Grava a memória atualizada com debounce (sem travar durante arrasto)
-        if (memoriasModificadas.length > 0) {
-          clearTimeout(timerGravarMemoria);
-          timerGravarMemoria = setTimeout(async () => {
-            await OBR.scene.items.updateItems(
-              memoriasModificadas.map((m) => m.id),
-              (lista) => {
-                for (const it of lista) {
-                  const m = memoriasModificadas.find((x) => x.id === it.id);
-                  if (m) it.metadata[CHAVE_TOKEN_MEM] = { b64: m.b64, t: Date.now() };
-                }
-              }
-            );
-          }, 750);
-        }
-
-        const ehMestreLivre = role === "GM" && cfg.modoVisaoMestre === "TUDO";
-        const bx1 = grade.origemX - 1500;
-        const by1 = grade.origemY - 1500;
-        const bx2 = grade.origemX + grade.largura + 1500;
-        const by2 = grade.origemY + grade.altura + 1500;
-        const contorno = [
-          [Command.MOVE, bx1, by1],
-          [Command.LINE, bx2, by1],
-          [Command.LINE, bx2, by2],
-          [Command.LINE, bx1, by2],
-          [Command.CLOSE]
-        ];
-
-        const furosAgora = [];
-        for (const p of poligonosVisiveisAgora) furosAgora.push(...poligonoParaComandos(p));
-
-        // Camada 1: "A névoa de hoje" (Explorado, mas sem luz/visão agora)
-        novosLocais.push(
-          buildPath()
-            .id(ID_NEVOA_EXPLORADA)
-            .name("Névoa Explorada")
-            .commands([...contorno, ...furosAgora])
-            .fillRule("evenodd")
-            .fillColor(cfg.corNevoaExplorada || "#181822")
-            .fillOpacity(ehMestreLivre ? 0.28 : cfg.opacidadeNevoaExplorada ?? 0.74)
-            .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(500)
-            .locked(true)
-            .disableHit(true)
-            .build()
-        );
-
-        // Camada 2: Escuridão Total (Nunca explorado)
-        const furosExplorados = converterBitsetParaFuros(bitsetUniao, grade);
-        novosLocais.push(
-          buildPath()
-            .id(ID_NEVOA_ESCURIDAO)
-            .name("Escuridão Nunca Explorado")
-            .commands([...contorno, ...furosExplorados])
-            .fillRule("evenodd")
-            .fillColor("#000000")
-            .fillOpacity(ehMestreLivre ? 0.52 : 1.0)
-            .strokeOpacity(0)
-            .layer("FOG")
-            .zIndex(600)
-            .locked(true)
-            .disableHit(true)
-            .build()
-        );
-      }
-
-      if (novosLocais.length > 0) {
+      // ========================================================================
+      // 1. Paredes Locais (Wall Nativa + Linha Vermelha do Mestre)
+      // ========================================================================
+      async function reconstruirParedesLocais() {
+        if (!cenaPronta) return;
         try {
-          await OBR.scene.local.addItems(novosLocais);
-        } catch (e) {
-          console.error("[névoa] addItems falhou, tentando um por um:", e);
-          for (const it of novosLocais) {
-            try { await OBR.scene.local.addItems([it]); } catch (e2) { console.error("[névoa] item ruim:", it.id, e2); }
+          if (idsParedesLocais.length > 0) {
+            await OBR.scene.local.deleteItems(idsParedesLocais);
+            idsParedesLocais = [];
           }
+
+          const novosItens = [];
+
+          for (const w of paredesCena) {
+            if (!w.points || w.points.length < 2) continue;
+
+            if (!(w.porta && w.aberta)) {
+              const wallBuilder = buildWall()
+                .id(`local_wall_${w.id}`)
+                .points(w.points)
+                .metadata({ [`${NS}/wallId`]: w.id });
+
+              if (typeof wallBuilder.doubleSided === "function") {
+                wallBuilder.doubleSided(true);
+              }
+              const wallItem = wallBuilder.build();
+              novosItens.push(wallItem);
+              idsParedesLocais.push(wallItem.id);
+            }
+
+            if (souMestre && config.mostrarParedesMestre) {
+              const cor = w.porta
+                ? w.aberta
+                  ? "#22c55e"
+                  : "#f59e0b"
+                : "#ef4444";
+
+              const traco = w.porta && w.aberta ? [10, 10] : w.porta ? [16, 6] : [];
+
+              const curve = buildCurve()
+                .id(`local_vis_${w.id}`)
+                .points(w.points)
+                .strokeColor(cor)
+                .strokeWidth(Number(config.espessuraParede) || 6)
+                .strokeDash(traco)
+                .fillOpacity(0)
+                .tension(0)
+                .layer("DRAWING")
+                .disableHit(true)
+                .metadata({ [`${NS}/visId`]: w.id })
+                .build();
+
+              novosItens.push(curve);
+              idsParedesLocais.push(curve.id);
+            }
+          }
+
+          if (novosItens.length > 0) {
+            await OBR.scene.local.addItems(novosItens);
+          }
+        } catch (err) {
+          console.error("[3em1] Erro ao reconstruir paredes locais:", err);
         }
       }
-    }
 
-    // Salva um novo traço bruto no OBR.scene.local para o painel ver imediatamente
-    async function registrarTracoBrutoLocal(pontos, linhaReta) {
-      const dpi = await OBR.scene.grid.getDpi();
-      const esp = Math.max(7, Math.round(dpi * 0.05));
-      const id = `${ID_EXT}_bruto_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
-
-      const curva = buildCurve()
-        .id(id)
-        .name("Traço Provisório")
-        .points(pontos)
-        .tension(0)
-        .strokeColor("#00e5ff")
-        .strokeWidth(esp)
-        .strokeDash([esp * 2, esp * 1.5])
-        .strokeOpacity(0.95)
-        .fillOpacity(0)
-        .layer("CONTROL")
-        .zIndex(98000)
-        .locked(true)
-        .disableHit(true)
-        .metadata({
-          [CHAVE_TRACO_BRUTO]: { pontos, linhaReta }
-        })
-        .build();
-
-      await OBR.scene.local.addItems([curva]);
-      await atualizarPreviaTracosLocais();
-    }
-
-    // =========================================================================
-    // 4. INICIALIZAÇÃO DAS FERRAMENTAS NO OWLBEAR
-    // =========================================================================
-    OBR.onReady(async () => {
-      const idFerramenta = `${ID_EXT}/ferramenta-principal`;
-      const idModoLapis = `${ID_EXT}/modo-lapis`;
-      const idModoLuz = `${ID_EXT}/modo-luz`;
-      const idModoBorracha = `${ID_EXT}/modo-borracha`;
-
-      await OBR.tool.create({
-        id: idFerramenta,
-        defaultMode: idModoLapis,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "Paredes, Luz e Névoa",
-            filter: { roles: ["GM"] }
-          }
-        ]
-      });
-
-      // MODO 1: Lápis / Linha Reta de Parede
-      await OBR.tool.createMode({
-        id: idModoLapis,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "1. Desenhar Parede (Lápis/Reta)",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
-          }
-        ],
-        cursors: [{ cursor: "crosshair" }],
-        async onToolClick(_, event) {
-          const cfg = await obterConfigCena();
-          const dpi = await OBR.scene.grid.getDpi();
-          let pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          if (cfg.alinharAoGrid) {
-            pt.x = alinharAoGridValor(pt.x, dpi, cfg.passoGridMeiaCelula);
-            pt.y = alinharAoGridValor(pt.y, dpi, cfg.passoGridMeiaCelula);
+      async function atualizarRascunhoEPrevia() {
+        if (!cenaPronta) return;
+        try {
+          if (idsRascunhoLocais.length > 0) {
+            await OBR.scene.local.deleteItems(idsRascunhoLocais);
+            idsRascunhoLocais = [];
           }
 
-          if (!ponto1Reta) {
-            ponto1Reta = pt;
-            // Desenha uma bolinha azul visível no Ponto 1
-            const marcadorP1 = buildShape()
-              .id(ID_PONTO1_RETA)
-              .shapeType("CIRCLE")
-              .width(22)
-              .height(22)
-              .position(pt)
-              .fillColor("#00e5ff")
-              .fillOpacity(1)
-              .strokeColor("#ffffff")
-              .strokeWidth(3)
-              .layer("CONTROL")
-              .zIndex(99999)
-              .locked(true)
+          const itens = [];
+
+          for (const t of tracosPendentes) {
+            if (!t.points || t.points.length < 2) continue;
+            const prev = buildCurve()
+              .id(`prev_${t.id}`)
+              .points(t.points)
+              .strokeColor("#14b8a6")
+              .strokeWidth(6)
+              .fillOpacity(0)
+              .tension(0)
+              .layer("DRAWING")
               .disableHit(true)
               .build();
-            await OBR.scene.local.addItems([marcadorP1]);
-          } else {
-            const p1 = ponto1Reta;
-            ponto1Reta = null;
-            await OBR.scene.local.deleteItems([ID_PONTO1_RETA]);
-            await registrarTracoBrutoLocal([p1, pt], true);
+            itens.push(prev);
+            idsRascunhoLocais.push(prev.id);
           }
-        },
-        async onToolDragStart(_, event) {
-          ponto1Reta = null;
-          await OBR.scene.local.deleteItems([ID_PONTO1_RETA]);
 
-          const cfg = await obterConfigCena();
-          const usarReta = Boolean(event.shiftKey || cfg.modoLinhaReta);
-          const p0 = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          const p1 = { x: p0.x + 1, y: p0.y + 1 };
-          tracoAtivo = { pontos: [p0, p1], linhaReta: usarReta };
+          if (pontosAtuais.length >= 2) {
+            const draft = buildCurve()
+              .id("draft_ativo_3em1")
+              .points(pontosAtuais)
+              .strokeColor("#f97316")
+              .strokeWidth(5)
+              .strokeDash([12, 8])
+              .fillOpacity(0)
+              .tension(0)
+              .layer("DRAWING")
+              .disableHit(true)
+              .build();
+            itens.push(draft);
+            idsRascunhoLocais.push(draft.id);
+          }
 
-          const dpi = await OBR.scene.grid.getDpi();
-          const esp = Math.max(8, Math.round(dpi * 0.055));
+          if (itens.length > 0) {
+            await OBR.scene.local.addItems(itens);
+          }
+          notificarEstadoPopover();
+        } catch (err) {
+          console.error("[3em1] Erro ao desenhar prévia:", err);
+        }
+      }
 
-          const itemArrasto = buildCurve()
-            .id(ID_TRACO_ARRASTO)
-            .points(tracoAtivo.pontos)
-            .tension(0)
-            .strokeColor("#00e5ff")
-            .strokeWidth(esp)
-            .strokeDash([esp * 2, esp * 1.5])
-            .fillOpacity(0)
-            .layer("CONTROL")
-            .zIndex(99999)
-            .locked(true)
-            .disableHit(true)
-            .build();
+      async function salvarParedesNaCena(novaLista, registrarHistorico = true) {
+        if (!cenaPronta) return;
+        if (registrarHistorico) {
+          historicoCena.push(JSON.parse(JSON.stringify(paredesCena)));
+          if (historicoCena.length > 30) historicoCena.shift();
+          futuroCena = [];
+        }
 
-          await OBR.scene.local.addItems([itemArrasto]);
-        },
-        onToolDragMove(_, event) {
-          if (!tracoAtivo) return;
-          const pt = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-          if (tracoAtivo.linhaReta) {
-            tracoAtivo.pontos = [tracoAtivo.pontos[0], pt];
-          } else {
-            const ult = tracoAtivo.pontos[tracoAtivo.pontos.length - 1];
-            if (Math.hypot(pt.x - ult.x, pt.y - ult.y) >= 4) {
-              tracoAtivo.pontos.push(pt);
+        paredesCena = novaLista;
+        const metaAtual = await OBR.scene.getMetadata();
+        const patch = criarPatchMetadadosParedes(paredesCena, metaAtual);
+        versaoAplicada = patch[`${NS}/paredes-index`].versao;
+        await OBR.scene.setMetadata(patch);
+        await reconstruirParedesLocais();
+        notificarEstadoPopover();
+      }
+
+      async function concluirTracosPendentes() {
+        if (tracosPendentes.length === 0) {
+          await OBR.notification.show("Nenhum traço pendente para concluir.", "INFO");
+          return;
+        }
+        const novaLista = [...paredesCena, ...tracosPendentes];
+        const qtd = tracosPendentes.length;
+        tracosPendentes = [];
+        tracosDesfeitos = [];
+        pontosAtuais = [];
+        pontoInicialLinha = null;
+
+        await atualizarRascunhoEPrevia();
+        await salvarParedesNaCena(novaLista, true);
+        await OBR.notification.show(`${qtd} parede(s) gravada(s) na cena!`, "SUCCESS");
+      }
+
+      async function cancelarRascunho() {
+        pontosAtuais = [];
+        pontoInicialLinha = null;
+        tracosPendentes = [];
+        tracosDesfeitos = [];
+        await atualizarRascunhoEPrevia();
+      }
+
+      async function acaoDesfazer() {
+        if (tracosPendentes.length > 0) {
+          const removido = tracosPendentes.pop();
+          tracosDesfeitos.push(removido);
+          await atualizarRascunhoEPrevia();
+          return;
+        }
+        if (historicoCena.length > 0) {
+          futuroCena.push(JSON.parse(JSON.stringify(paredesCena)));
+          const anterior = historicoCena.pop();
+          await salvarParedesNaCena(anterior, false);
+          await OBR.notification.show("Última alteração de parede desfeita.", "INFO");
+        }
+      }
+
+      async function acaoRefazer() {
+        if (tracosDesfeitos.length > 0) {
+          const restaurado = tracosDesfeitos.pop();
+          tracosPendentes.push(restaurado);
+          await atualizarRascunhoEPrevia();
+          return;
+        }
+        if (futuroCena.length > 0) {
+          historicoCena.push(JSON.parse(JSON.stringify(paredesCena)));
+          const proximo = futuroCena.pop();
+          await salvarParedesNaCena(proximo, false);
+          await OBR.notification.show("Alteração de parede refeita.", "INFO");
+        }
+      }
+
+      function encontrarParedeMaisProxima(ponto, raioMax = 36) {
+        let melhorIndice = -1;
+        let menorDist = raioMax;
+
+        for (let i = 0; i < paredesCena.length; i++) {
+          const pts = paredesCena[i].points || [];
+          for (let j = 0; j < pts.length - 1; j++) {
+            const d = distanciaPontoSegmento(ponto, pts[j], pts[j + 1]);
+            if (d <= menorDist) {
+              menorDist = d;
+              melhorIndice = i;
             }
           }
-
-          if (!atualizandoArrasto) {
-            atualizandoArrasto = true;
-            requestAnimationFrame(async () => {
-              try {
-                if (tracoAtivo) {
-                  const copia = tracoAtivo.pontos.slice();
-                  await OBR.scene.local.updateItems([ID_TRACO_ARRASTO], (itens) => {
-                    for (const i of itens) i.points = copia;
-                  });
-                }
-              } finally {
-                atualizandoArrasto = false;
-              }
-            });
-          }
-        },
-        async onToolDragEnd() {
-          await OBR.scene.local.deleteItems([ID_TRACO_ARRASTO]);
-          if (tracoAtivo && tracoAtivo.pontos.length >= 2) {
-            const finalizado = tracoAtivo;
-            tracoAtivo = null;
-            await registrarTracoBrutoLocal(finalizado.pontos, finalizado.linhaReta);
-          }
-        },
-        async onToolDragCancel() {
-          tracoAtivo = null;
-          await OBR.scene.local.deleteItems([ID_TRACO_ARRASTO]);
         }
-      });
+        return melhorIndice;
+      }
 
-      // MODO 2: Ferramenta [Luz] (clicar no mapa cria uma fonte de luz invisível para players)
-      await OBR.tool.createMode({
-        id: idModoLuz,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "2. [Luz] Criar Fonte de Luz",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
-          }
-        ],
-        cursors: [{ cursor: "pointer" }],
-        async onToolClick(_, event) {
-          const cfg = await obterConfigCena();
-          const itemLuz = buildShape()
-            .name("Fonte de Luz [Luz]")
-            .shapeType("CIRCLE")
-            .width(42)
-            .height(42)
-            .position({ x: event.pointerPosition.x, y: event.pointerPosition.y })
-            .fillColor("#fde047")
-            .fillOpacity(0.6)
-            .strokeOpacity(0)
-            .visible(false)
-            .layer("PROP")
-            .metadata({
-              [CHAVE_LUZ_SOLTA]: {
-                ativa: true,
-                raioCelulas: 4,
-                cor: cfg.corLuzPadrao || "#ffe8b6",
-                falloff: cfg.falloffPadrao ?? 0.5
-              }
-            })
-            .build();
+      async function apagarParedeEm(ponto) {
+        const idx = encontrarParedeMaisProxima(ponto, 38);
+        if (idx === -1) return;
+        const novaLista = paredesCena.filter((_, i) => i !== idx);
+        await salvarParedesNaCena(novaLista, true);
+      }
 
-          await OBR.scene.items.addItems([itemLuz]);
-          await OBR.player.select([itemLuz.id]);
-          await OBR.notification.show("Fonte de [Luz] criada!", "SUCCESS");
+      async function alternarPortaEm(ponto) {
+        const idx = encontrarParedeMaisProxima(ponto, 42);
+        if (idx === -1) {
+          await OBR.notification.show("Clique sobre uma parede para torná-la Porta ou abrir/fechar.", "INFO");
+          return;
         }
-      });
+        const novaLista = JSON.parse(JSON.stringify(paredesCena));
+        const alvo = novaLista[idx];
+        if (!alvo.porta) {
+          alvo.porta = true;
+          alvo.aberta = false;
+          await OBR.notification.show("Parede convertida em Porta (Fechada). Clique de novo para abrir!", "SUCCESS");
+        } else {
+          alvo.aberta = !alvo.aberta;
+          await OBR.notification.show(alvo.aberta ? "Porta Aberta (visão liberada)!" : "Porta Fechada!", "INFO");
+        }
+        await salvarParedesNaCena(novaLista, true);
+      }
 
-      // MODO 3: Borracha de Paredes
-      await OBR.tool.createMode({
-        id: idModoBorracha,
-        icons: [
-          {
-            icon: "https://gaduarte14.github.io/nevoa/icon.svg",
-            label: "3. Borracha de Parede",
-            filter: { activeTools: [idFerramenta], roles: ["GM"] }
+      // ========================================================================
+      // 2. Luz com Falloff Individual (Cada jogador só vê a luz do SEU token!)
+      // ========================================================================
+      function tokenPertenceAoJogadorAtual(token, cfgLuz) {
+        // O Mestre sempre enxerga todas as luzes
+        if (souMestre) return true;
+
+        // Se a luz foi marcada explicitamente para TODOS (ex: fogueira ou visão compartilhada)
+        if (!cfgLuz.visaoIndividual || cfgLuz.donoId === "TODOS") {
+          return true;
+        }
+
+        // Se o donoId já está vinculado ao ID deste jogador
+        if (cfgLuz.donoId && cfgLuz.donoId !== "AUTO") {
+          return cfgLuz.donoId === meuPlayerId;
+        }
+
+        // Se está em modo AUTO e o próprio jogador criou o token
+        if (token.createdUserId === meuPlayerId) {
+          return true;
+        }
+
+        return false;
+      }
+
+      // Reconstrói as luzes APENAS localmente (OBR.scene.local) na tela de quem tem permissão
+      async function sincronizarLuzesLocais() {
+        if (!cenaPronta) return;
+        try {
+          if (idsLuzesLocais.length > 0) {
+            await OBR.scene.local.deleteItems(idsLuzesLocais);
+            idsLuzesLocais = [];
           }
-        ],
-        cursors: [{ cursor: "pointer" }],
-        async onToolClick(_, event) {
-          const dpi = await OBR.scene.grid.getDpi();
-          const paredes = await obterParedesCena();
-          let idx = -1;
-          let menD = Math.max(28, dpi * 0.22);
-          for (let i = 0; i < paredes.length; i++) {
-            const p = paredes[i];
-            const proj = projetarPontoNoSegmento(
-              event.pointerPosition,
-              { x: p.x1, y: p.y1 },
-              { x: p.x2, y: p.y2 }
-            );
-            if (proj.dist <= menD) {
-              menD = proj.dist;
-              idx = i;
+
+          const todosItens = await OBR.scene.items.getItems();
+          const tokensComLuz = todosItens.filter((it) => Boolean(it.metadata?.[META_LUZ_TOKEN]));
+
+          const novasLuzesLocais = [];
+
+          for (const tok of tokensComLuz) {
+            const cfgLuz = tok.metadata[META_LUZ_TOKEN];
+            if (!cfgLuz) continue;
+
+            // Verifica se este jogador pode ver a luz deste token!
+            if (!tokenPertenceAoJogadorAtual(tok, cfgLuz)) {
+              continue; // Não cria a luz na tela do amigo!
             }
-          }
-          if (idx !== -1) {
-            const novas = paredes.filter((_, i) => i !== idx);
-            await OBR.scene.setMetadata({
-              [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas }
-            });
-          }
-        }
-      });
 
-      // Escuta mudanças na cena para recalcular visibilidade, luz e névoa em tempo real
-      if (await OBR.scene.isReady()) await recalcularTudoNaCena();
+            const alcancePx = Math.max(0.5, Number(cfgLuz.alcanceQuadrados) || 6) * gridDpi;
+            const fontePx = Math.max(0.1, Number(cfgLuz.raioFonteQuadrados) || 1) * gridDpi;
+            const falloffVal = Math.max(0.05, Number(cfgLuz.falloff) || 0.8);
+            const outer = Math.min(360, Math.max(15, Number(cfgLuz.anguloCone) || 360));
+            const inner = outer < 360 ? Math.min(outer, Math.max(5, Number(cfgLuz.anguloInterno) || 35)) : 360;
+            const tipo = cfgLuz.tipoLuz || "PRIMARY";
 
-      OBR.scene.onReadyChange(async (ok) => {
-        if (ok) await recalcularTudoNaCena();
-      });
+            const builder = buildLight()
+              .id(`local_light_${tok.id}`)
+              .name(`Luz de ${tok.name || "Token"}`)
+              .position(tok.position)
+              .rotation(Number(cfgLuz.rotacaoFeixe ?? tok.rotation ?? 0))
+              .attenuationRadius(alcancePx)
+              .sourceRadius(fontePx)
+              .falloff(falloffVal)
+              .outerAngle(outer)
+              .innerAngle(inner)
+              .lightType(tipo)
+              .attachedTo(tok.id);
 
-      OBR.scene.onMetadataChange(async () => {
-        await atualizarPreviaTracosLocais();
-        await recalcularTudoNaCena();
-      });
-
-      OBR.player.onChange(async () => {
-        await recalcularTudoNaCena();
-      });
-
-      OBR.scene.items.onChange(async (itens) => {
-        const cfg = await obterConfigCena();
-        const role = await OBR.player.getRole();
-
-        if (role === "GM" && cfg.bloquearMovimentoTokens) {
-          const paredes = await obterParedesCena();
-          if (paredes.length > 0) {
-            const tokens = itens.filter((i) => i.layer === "CHARACTER");
-            const voltar = [];
-            for (const tk of tokens) {
-              const ant = ultimasPosicoesTokens.get(tk.id);
-              if (ant && (ant.x !== tk.position.x || ant.y !== tk.position.y)) {
-                const cruzou = paredes.some(
-                  (p) =>
-                    !p.aberta &&
-                    segmentosSeCruzam(
-                      ant,
-                      tk.position,
-                      { x: p.x1, y: p.y1 },
-                      { x: p.x2, y: p.y2 }
-                    )
-                );
-                if (cruzou) {
-                  voltar.push({ id: tk.id, pos: ant });
-                  continue;
-                }
-              }
-              ultimasPosicoesTokens.set(tk.id, { x: tk.position.x, y: tk.position.y });
+            if (typeof builder.disableAttachmentBehavior === "function") {
+              builder.disableAttachmentBehavior(["SCALE"]);
             }
-            if (voltar.length > 0) {
-              await OBR.scene.items.updateItems(
-                voltar.map((v) => v.id),
-                (lista) => {
-                  for (const it of lista) {
-                    const v = voltar.find((x) => x.id === it.id);
-                    if (v) it.position = v.pos;
+
+            const itemLocal = builder.build();
+            novasLuzesLocais.push(itemLocal);
+            idsLuzesLocais.push(itemLocal.id);
+          }
+
+          if (novasLuzesLocais.length > 0) {
+            await OBR.scene.local.addItems(novasLuzesLocais);
+          }
+        } catch (err) {
+          console.error("[3em1] Erro ao sincronizar luzes locais:", err);
+        }
+      }
+
+      function montarDadosLuzAtual() {
+        // Se quem está aplicando for um Jogador, já vincula direto ao ID dele!
+        let donoId = config.donoLuzEscolhido || "AUTO";
+        if (!souMestre) {
+          donoId = meuPlayerId;
+        }
+
+        return {
+          visaoIndividual: Boolean(config.visaoIndividual),
+          donoId,
+          alcanceQuadrados: Number(config.alcanceQuadrados) || 6,
+          raioFonteQuadrados: Number(config.raioFonteQuadrados) || 1,
+          falloff: Number(config.falloff) || 0.8,
+          anguloCone: Number(config.anguloCone) || 360,
+          anguloInterno: Number(config.anguloInterno) || 40,
+          tipoLuz: config.tipoLuz || "PRIMARY",
+          rotacaoFeixe: 0
+        };
+      }
+
+      async function aplicarLuzEmTokenAlvo(alvo) {
+        if (!alvo || alvo.layer === "MAP" || alvo.type === "LIGHT") {
+          await OBR.notification.show(
+            "Clique sobre um Token para anexar a luz individual a ele!",
+            "WARNING"
+          );
+          return;
+        }
+
+        const dadosLuz = montarDadosLuzAtual();
+
+        await OBR.scene.items.updateItems([alvo.id], (items) => {
+          for (const item of items) {
+            item.metadata[META_LUZ_TOKEN] = {
+              ...dadosLuz,
+              rotacaoFeixe: item.rotation || 0
+            };
+          }
+        });
+
+        await sincronizarLuzesLocais();
+        if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+        notificarEstadoPopover();
+
+        const msgDono =
+          !dadosLuz.visaoIndividual || dadosLuz.donoId === "TODOS"
+            ? "Luz compartilhada aplicada ao token!"
+            : dadosLuz.donoId === "AUTO"
+            ? "Luz individual aplicada! (Vinculará ao 1º jogador que clicar no token)"
+            : "Luz exclusiva vinculada ao jogador!";
+
+        await OBR.notification.show(msgDono, "SUCCESS");
+      }
+
+      async function aplicarLuzNosSelecionados() {
+        const selecao = await OBR.player.getSelection();
+        if (!selecao || selecao.length === 0) {
+          await OBR.notification.show("Selecione pelo menos um token no mapa primeiro.", "WARNING");
+          return;
+        }
+
+        const dadosLuz = montarDadosLuzAtual();
+
+        await OBR.scene.items.updateItems(selecao, (items) => {
+          for (const item of items) {
+            item.metadata[META_LUZ_TOKEN] = {
+              ...dadosLuz,
+              rotacaoFeixe: item.rotation || 0
+            };
+          }
+        });
+
+        await sincronizarLuzesLocais();
+        if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+        notificarEstadoPopover();
+        await OBR.notification.show(`Luz configurada em ${selecao.length} token(s)!`, "SUCCESS");
+      }
+
+      async function removerLuzDeAlvoOuPonto(posicao, alvo) {
+        if (alvo && alvo.metadata?.[META_LUZ_TOKEN]) {
+          await OBR.scene.items.updateItems([alvo.id], (items) => {
+            for (const item of items) {
+              delete item.metadata[META_LUZ_TOKEN];
+            }
+          });
+          await sincronizarLuzesLocais();
+          await OBR.notification.show("Luz removida do token.", "INFO");
+          notificarEstadoPopover();
+          return;
+        }
+
+        const todos = await OBR.scene.items.getItems((it) => Boolean(it.metadata?.[META_LUZ_TOKEN]));
+        const proximo = todos.find((t) => distancia(t.position, posicao) <= gridDpi * 0.8);
+        if (proximo) {
+          await OBR.scene.items.updateItems([proximo.id], (items) => {
+            for (const item of items) {
+              delete item.metadata[META_LUZ_TOKEN];
+            }
+          });
+          await sincronizarLuzesLocais();
+          await OBR.notification.show("Luz removida do token.", "INFO");
+          notificarEstadoPopover();
+        }
+      }
+
+      // ========================================================================
+      // 3. Memória de Névoa 100% Individual (Rastreia só os tokens que este player vê!)
+      // ========================================================================
+      function agendarAtualizacaoMemoria() {
+        if (timerMemoria) clearTimeout(timerMemoria);
+        timerMemoria = setTimeout(() => {
+          registrarPosicoesNaMemoria();
+        }, 240);
+      }
+
+      async function registrarPosicoesNaMemoria() {
+        if (!cenaPronta || !config.memoriaAtiva) return;
+        try {
+          const todosItens = await OBR.scene.items.getItems();
+          // Filtra APENAS os tokens cuja luz pertence a este jogador!
+          const meusTokensComLuz = todosItens.filter((it) => {
+            const cfgLuz = it.metadata?.[META_LUZ_TOKEN];
+            return cfgLuz && tokenPertenceAoJogadorAtual(it, cfgLuz);
+          });
+
+          if (meusTokensComLuz.length === 0) {
+            await renderizarMemoriaLocal([]);
+            return;
+          }
+
+          const passoCelula = Math.max(0.75, Number(config.resolucaoCelula) || 1.5) * gridDpi;
+          const raioMemPx = Math.max(1, Number(config.raioMemoriaQuadrados) || 5) * gridDpi;
+
+          let mudou = false;
+          const origensAtivas = [];
+
+          for (const tok of meusTokensComLuz) {
+            const pos = tok.position;
+            origensAtivas.push({ pos, raio: raioMemPx });
+
+            const passos = Math.ceil(raioMemPx / passoCelula);
+            const cxBase = Math.round(pos.x / passoCelula);
+            const cyBase = Math.round(pos.y / passoCelula);
+
+            for (let dx = -passos; dx <= passos; dx++) {
+              for (let dy = -passos; dy <= passos; dy++) {
+                const centroCelula = {
+                  x: (cxBase + dx) * passoCelula,
+                  y: (cyBase + dy) * passoCelula
+                };
+                if (distancia(pos, centroCelula) <= raioMemPx) {
+                  if (temVisadaLivre(pos, centroCelula, paredesCena)) {
+                    const chave = `${cxBase + dx},${cyBase + dy}`;
+                    if (!celulasVisitadas.has(chave)) {
+                      celulasVisitadas.add(chave);
+                      mudou = true;
+                    }
                   }
                 }
-              );
-              return;
+              }
             }
           }
+
+          if (mudou) {
+            salvarMemoriaLocalJogador(meuPlayerId, celulasVisitadas);
+          }
+
+          await renderizarMemoriaLocal(origensAtivas);
+          notificarEstadoPopover();
+        } catch (err) {
+          console.error("[3em1] Erro na memória de névoa:", err);
+        }
+      }
+
+      async function renderizarMemoriaLocal(origensAtivas = []) {
+        if (!cenaPronta) return;
+        try {
+          if (idsMemoriaLocais.length > 0) {
+            await OBR.scene.local.deleteItems(idsMemoriaLocais);
+            idsMemoriaLocais = [];
+          }
+
+          if (!config.memoriaAtiva || celulasVisitadas.size === 0) return;
+
+          const passoCelula = Math.max(0.75, Number(config.resolucaoCelula) || 1.5) * gridDpi;
+          const itensMemoria = [];
+          const chaves = Array.from(celulasVisitadas).slice(-350);
+
+          for (const chave of chaves) {
+            const [gx, gy] = chave.split(",").map(Number);
+            if (Number.isNaN(gx) || Number.isNaN(gy)) continue;
+
+            const pos = { x: gx * passoCelula, y: gy * passoCelula };
+
+            const dentroVisaoAtual = origensAtivas.some(
+              (o) => distancia(o.pos, pos) < o.raio * 0.65 && temVisadaLivre(o.pos, pos, paredesCena)
+            );
+
+            if (dentroVisaoAtual) continue;
+
+            if (config.modoMemoria === "LUZ_SECUNDARIA") {
+              const lMem = buildLight()
+                .id(`mem_light_${gx}_${gy}`)
+                .position(pos)
+                .attenuationRadius(passoCelula * 1.45)
+                .sourceRadius(passoCelula * 0.25)
+                .falloff(Number(config.falloffMemoria) || 1.2)
+                .lightType("AUXILIARY")
+                .build();
+              itensMemoria.push(lMem);
+              idsMemoriaLocais.push(lMem.id);
+            } else {
+              const shape = buildShape()
+                .id(`mem_sh_${gx}_${gy}`)
+                .shapeType("CIRCLE")
+                .width(passoCelula * 1.15)
+                .height(passoCelula * 1.15)
+                .position(pos)
+                .fillColor("#0f172a")
+                .fillOpacity(Number(config.opacidadeSombra) || 0.45)
+                .strokeOpacity(0)
+                .layer("FOG")
+                .disableHit(true)
+                .build();
+              itensMemoria.push(shape);
+              idsMemoriaLocais.push(shape.id);
+            }
+          }
+
+          if (itensMemoria.length > 0) {
+            await OBR.scene.local.addItems(itensMemoria);
+          }
+        } catch (err) {
+          console.error("[3em1] Erro ao renderizar memória local:", err);
+        }
+      }
+
+      async function limparMemoriaNevoa() {
+        celulasVisitadas.clear();
+        salvarMemoriaLocalJogador(meuPlayerId, celulasVisitadas);
+        if (idsMemoriaLocais.length > 0) {
+          await OBR.scene.local.deleteItems(idsMemoriaLocais);
+          idsMemoriaLocais = [];
+        }
+        await OBR.notification.show("Memória de névoa limpa!", "INFO");
+        notificarEstadoPopover();
+      }
+
+      // ========================================================================
+      // Registro das Ferramentas na Barra do Owlbear Rodeo
+      // ========================================================================
+      async function registrarFerramentas() {
+        await OBR.tool.create({
+          id: `${NS}/tool-parede`,
+          icons: [{ icon: ICONES.parede, label: "Parede (Lápis)" }],
+          shortcut: "W",
+          defaultMode: `${NS}/modo-lapis`,
+          disabled: {
+            roles: ["PLAYER"],
+            permissions: []
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-lapis`,
+          icons: [
+            {
+              icon: ICONES.lapis,
+              label: "Lápis (Mão livre)",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onToolDragStart(_, ev) {
+            pontosAtuais = [ev.pointerPosition];
+            atualizarRascunhoEPrevia();
+          },
+          onToolDragMove(_, ev) {
+            if (pontosAtuais.length === 0) return;
+            const ultimo = pontosAtuais[pontosAtuais.length - 1];
+            if (distancia(ultimo, ev.pointerPosition) >= 4) {
+              pontosAtuais.push(ev.pointerPosition);
+              atualizarRascunhoEPrevia();
+            }
+          },
+          onToolDragEnd(_, ev) {
+            pontosAtuais.push(ev.pointerPosition);
+            const processado = processarTraco(
+              pontosAtuais,
+              config,
+              paredesCena,
+              tracosPendentes,
+              gridDpi
+            );
+            pontosAtuais = [];
+            if (processado) {
+              tracosPendentes.push(processado);
+              tracosDesfeitos = [];
+            }
+            atualizarRascunhoEPrevia();
+          },
+          onToolDragCancel() {
+            pontosAtuais = [];
+            atualizarRascunhoEPrevia();
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-linha`,
+          icons: [
+            {
+              icon: ICONES.linha,
+              label: "Linha Reta (2 cliques)",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onToolClick(_, ev) {
+            if (!pontoInicialLinha) {
+              pontoInicialLinha = ev.pointerPosition;
+              pontosAtuais = [pontoInicialLinha, pontoInicialLinha];
+              atualizarRascunhoEPrevia();
+            } else {
+              const processado = processarTraco(
+                [pontoInicialLinha, ev.pointerPosition],
+                config,
+                paredesCena,
+                tracosPendentes,
+                gridDpi
+              );
+              pontoInicialLinha = null;
+              pontosAtuais = [];
+              if (processado) {
+                tracosPendentes.push(processado);
+                tracosDesfeitos = [];
+              }
+              atualizarRascunhoEPrevia();
+            }
+          },
+          onToolMove(_, ev) {
+            if (pontoInicialLinha) {
+              pontosAtuais = [pontoInicialLinha, ev.pointerPosition];
+              atualizarRascunhoEPrevia();
+            }
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-porta`,
+          icons: [
+            {
+              icon: ICONES.porta,
+              label: "Porta (Abrir / Fechar)",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onToolClick(_, ev) {
+            alternarPortaEm(ev.pointerPosition);
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-apagar`,
+          icons: [
+            {
+              icon: ICONES.borracha,
+              label: "Apagar Parede",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onToolClick(_, ev) {
+            apagarParedeEm(ev.pointerPosition);
+          },
+          onToolDragMove(_, ev) {
+            apagarParedeEm(ev.pointerPosition);
+          }
+        });
+
+        await OBR.tool.createAction({
+          id: `${NS}/acao-concluir`,
+          icons: [
+            {
+              icon: ICONES.concluir,
+              label: "Concluir (Gravar paredes)",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onClick() {
+            concluirTracosPendentes();
+          }
+        });
+
+        await OBR.tool.createAction({
+          id: `${NS}/acao-desfazer`,
+          icons: [
+            {
+              icon: ICONES.desfazer,
+              label: "Desfazer",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onClick() {
+            acaoDesfazer();
+          }
+        });
+
+        await OBR.tool.createAction({
+          id: `${NS}/acao-refazer`,
+          icons: [
+            {
+              icon: ICONES.refazer,
+              label: "Refazer",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onClick() {
+            acaoRefazer();
+          }
+        });
+
+        await OBR.tool.createAction({
+          id: `${NS}/acao-cancelar`,
+          icons: [
+            {
+              icon: ICONES.cancelar,
+              label: "Cancelar Rascunho",
+              filter: { activeTools: [`${NS}/tool-parede`] }
+            }
+          ],
+          onClick() {
+            cancelarRascunho();
+          }
+        });
+
+        // 2. FERRAMENTA DE LUZ
+        await OBR.tool.create({
+          id: `${NS}/tool-luz`,
+          icons: [{ icon: ICONES.luz, label: "Luz (Falloff)" }],
+          defaultMode: `${NS}/modo-colocar-luz`
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-colocar-luz`,
+          icons: [
+            {
+              icon: ICONES.luz,
+              label: "Anexar Luz no Token",
+              filter: { activeTools: [`${NS}/tool-luz`] }
+            }
+          ],
+          onToolClick(_, ev) {
+            aplicarLuzEmTokenAlvo(ev.target);
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-girar-cone`,
+          icons: [
+            {
+              icon: ICONES.cone,
+              label: "Apontar Feixe de Luz",
+              filter: { activeTools: [`${NS}/tool-luz`] }
+            }
+          ],
+          async onToolClick(_, ev) {
+            const tokensComLuz = await OBR.scene.items.getItems((it) =>
+              Boolean(it.metadata?.[META_LUZ_TOKEN])
+            );
+            if (tokensComLuz.length === 0) return;
+
+            let maisProximo = tokensComLuz[0];
+            let menor = distancia(tokensComLuz[0].position, ev.pointerPosition);
+            for (const t of tokensComLuz) {
+              const d = distancia(t.position, ev.pointerPosition);
+              if (d < menor) {
+                menor = d;
+                maisProximo = t;
+              }
+            }
+            const angGraus =
+              (Math.atan2(
+                ev.pointerPosition.y - maisProximo.position.y,
+                ev.pointerPosition.x - maisProximo.position.x
+              ) *
+                180) /
+                Math.PI -
+              90;
+
+            await OBR.scene.items.updateItems([maisProximo.id], (items) => {
+              for (const item of items) {
+                if (item.metadata[META_LUZ_TOKEN]) {
+                  item.metadata[META_LUZ_TOKEN].rotacaoFeixe = angGraus;
+                }
+              }
+            });
+            await sincronizarLuzesLocais();
+          }
+        });
+
+        await OBR.tool.createMode({
+          id: `${NS}/modo-remover-luz`,
+          icons: [
+            {
+              icon: ICONES.apagarLuz,
+              label: "Remover Luz do Token",
+              filter: { activeTools: [`${NS}/tool-luz`] }
+            }
+          ],
+          onToolClick(_, ev) {
+            removerLuzDeAlvoOuPonto(ev.pointerPosition, ev.target);
+          }
+        });
+      }
+
+      // ========================================================================
+      // Comunicação com o Painel Popover
+      // ========================================================================
+      async function notificarEstadoPopover() {
+        let qtdLuzes = 0;
+        let nevoaPreenchida = false;
+        let jogadoresSala = [];
+
+        try {
+          const party = await OBR.party.getPlayers();
+          jogadoresSala = party.map((p) => ({ id: p.id, name: p.name, role: p.role }));
+          jogadoresSala.unshift({ id: meuPlayerId, name: `${meuNome} (Você)`, role: souMestre ? "GM" : "PLAYER" });
+        } catch {}
+
+        if (cenaPronta) {
+          try {
+            const comLuz = await OBR.scene.items.getItems((it) => Boolean(it.metadata?.[META_LUZ_TOKEN]));
+            qtdLuzes = comLuz.length;
+            nevoaPreenchida = await OBR.scene.fog.getFilled();
+          } catch {}
         }
 
-        await recalcularTudoNaCena();
+        enviarMensagem({
+          tipo: "ESTADO_CENA",
+          estado: {
+            cenaPronta,
+            souMestre,
+            meuPlayerId,
+            jogadoresSala,
+            paredesSalvas: paredesCena.length,
+            portasSalvas: paredesCena.filter((w) => w.porta).length,
+            tracosPendentes: tracosPendentes.length,
+            luzesAtivas: qtdLuzes,
+            celulasMemoria: celulasVisitadas.size,
+            nevoaPreenchida
+          }
+        });
+      }
+
+      escutarMensagens(async (msg) => {
+        if (!msg || !msg.tipo) return;
+
+        switch (msg.tipo) {
+          case "CONFIG_ATUALIZADA":
+            config = msg.config || lerConfig();
+            await reconstruirParedesLocais();
+            await atualizarRascunhoEPrevia();
+            await sincronizarLuzesLocais();
+            if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+            else await renderizarMemoriaLocal([]);
+            break;
+
+          case "SOLICITAR_ESTADO":
+            await notificarEstadoPopover();
+            break;
+
+          case "CONCLUIR_TRACOS":
+            await concluirTracosPendentes();
+            break;
+
+          case "CANCELAR_TRACOS":
+            await cancelarRascunho();
+            break;
+
+          case "DESFAZER":
+            await acaoDesfazer();
+            break;
+
+          case "REFAZER":
+            await acaoRefazer();
+            break;
+
+          case "LIMPAR_PAREDES":
+            await cancelarRascunho();
+            await salvarParedesNaCena([], true);
+            await OBR.notification.show("Todas as paredes foram removidas da cena.", "INFO");
+            break;
+
+          case "IMPORTAR_PAREDES":
+            if (Array.isArray(msg.paredes)) {
+              await salvarParedesNaCena(msg.paredes, true);
+              await OBR.notification.show(`${msg.paredes.length} parede(s) importada(s)!`, "SUCCESS");
+            }
+            break;
+
+          case "EXPORTAR_PAREDES":
+            enviarMensagem({ tipo: "DADOS_EXPORTACAO", paredes: paredesCena });
+            break;
+
+          case "APLICAR_LUZ_SELECIONADOS":
+            await aplicarLuzNosSelecionados();
+            break;
+
+          case "LIMPAR_LUZES": {
+            const comLuz = await OBR.scene.items.getItems((it) => Boolean(it.metadata?.[META_LUZ_TOKEN]));
+            if (comLuz.length > 0) {
+              await OBR.scene.items.updateItems(
+                comLuz.map((i) => i.id),
+                (items) => {
+                  for (const item of items) delete item.metadata[META_LUZ_TOKEN];
+                }
+              );
+            }
+            // Também remove eventuais itens LIGHT antigos da cena
+            const luzesAntigas = await OBR.scene.items.getItems((it) => it.type === "LIGHT");
+            if (luzesAntigas.length > 0) {
+              await OBR.scene.items.deleteItems(luzesAntigas.map((l) => l.id));
+            }
+            await sincronizarLuzesLocais();
+            await OBR.notification.show("Todas as luzes foram removidas.", "INFO");
+            notificarEstadoPopover();
+            break;
+          }
+
+          case "ALTERNAR_NEVOA_CENA": {
+            if (!cenaPronta) break;
+            const atual = await OBR.scene.fog.getFilled();
+            await OBR.scene.fog.setFilled(!atual);
+            await OBR.notification.show(
+              !atual ? "Névoa dinâmica ativada na cena!" : "Névoa da cena desativada.",
+              "INFO"
+            );
+            notificarEstadoPopover();
+            break;
+          }
+
+          case "REGISTRAR_MEMORIA_AGORA":
+            await registrarPosicoesNaMemoria();
+            await OBR.notification.show("Memória de névoa atualizada!", "SUCCESS");
+            break;
+
+          case "LIMPAR_MEMORIA_NEVOA":
+            await limparMemoriaNevoa();
+            break;
+        }
       });
-    });
-  </script>
-</body>
+
+      // ========================================================================
+      // Auto-vínculo: Quando um JOGADOR clica em um token com luz em modo "AUTO",
+      // o token passa a ser exclusivamente daquele jogador!
+      // ========================================================================
+      async function verificarAutoVinculoJogador(player) {
+        if (!cenaPronta || player.role === "GM") return;
+        const selecao = player.selection || [];
+        if (selecao.length === 0) return;
+
+        const itensSelecionados = await OBR.scene.items.getItems(selecao);
+        const paraVincular = itensSelecionados.filter(
+          (it) => it.metadata?.[META_LUZ_TOKEN]?.donoId === "AUTO"
+        );
+
+        if (paraVincular.length > 0) {
+          await OBR.scene.items.updateItems(
+            paraVincular.map((i) => i.id),
+            (items) => {
+              for (const item of items) {
+                if (item.metadata[META_LUZ_TOKEN]) {
+                  item.metadata[META_LUZ_TOKEN].donoId = player.id;
+                  item.metadata[META_LUZ_TOKEN].donoNome = player.name;
+                }
+              }
+            }
+          );
+          await sincronizarLuzesLocais();
+          if (config.memoriaAtiva) agendarAtualizacaoMemoria();
+          await OBR.notification.show("Visão exclusiva deste token vinculada a você!", "SUCCESS");
+        }
+      }
+
+      // ========================================================================
+      // Inicialização na Cena
+      // ========================================================================
+      async function carregarCena() {
+        cenaPronta = true;
+        try {
+          meuPlayerId = await OBR.player.getId();
+          meuNome = await OBR.player.getName();
+          souMestre = (await OBR.player.getRole()) === "GM";
+          gridDpi = await OBR.scene.grid.getDpi();
+
+          const meta = await OBR.scene.getMetadata();
+          const lido = lerParedesDaCena(meta);
+          paredesCena = lido.paredes;
+          versaoAplicada = lido.versao;
+
+          celulasVisitadas = lerMemoriaLocalJogador(meuPlayerId);
+
+          await reconstruirParedesLocais();
+          await atualizarRascunhoEPrevia();
+          await sincronizarLuzesLocais();
+          if (config.memoriaAtiva) {
+            agendarAtualizacaoMemoria();
+          }
+          await notificarEstadoPopover();
+        } catch (err) {
+          console.error("[3em1] Erro ao carregar cena:", err);
+        }
+      }
+
+      OBR.onReady(async () => {
+        meuPlayerId = await OBR.player.getId();
+        meuNome = await OBR.player.getName();
+        souMestre = (await OBR.player.getRole()) === "GM";
+
+        await registrarFerramentas();
+
+        if (await OBR.scene.isReady()) {
+          await carregarCena();
+        }
+
+        OBR.scene.onReadyChange(async (pronta) => {
+          cenaPronta = pronta;
+          if (pronta) {
+            await carregarCena();
+          } else {
+            idsParedesLocais = [];
+            idsRascunhoLocais = [];
+            idsLuzesLocais = [];
+            idsMemoriaLocais = [];
+            notificarEstadoPopover();
+          }
+        });
+
+        OBR.player.onChange(async (player) => {
+          meuPlayerId = player.id;
+          meuNome = player.name;
+          const novoMestre = player.role === "GM";
+          if (novoMestre !== souMestre) {
+            souMestre = novoMestre;
+            await reconstruirParedesLocais();
+            await sincronizarLuzesLocais();
+          }
+          await verificarAutoVinculoJogador(player);
+          notificarEstadoPopover();
+        });
+
+        OBR.party.onChange(() => {
+          notificarEstadoPopover();
+        });
+
+        OBR.scene.grid.onChange((grid) => {
+          gridDpi = grid.dpi || 150;
+        });
+
+        OBR.scene.onMetadataChange(async (meta) => {
+          const lido = lerParedesDaCena(meta);
+          if (lido.versao !== versaoAplicada) {
+            versaoAplicada = lido.versao;
+            paredesCena = lido.paredes;
+            await reconstruirParedesLocais();
+          }
+          notificarEstadoPopover();
+        });
+
+        OBR.scene.items.onChange(async () => {
+          await sincronizarLuzesLocais();
+          if (config.memoriaAtiva) {
+            agendarAtualizacaoMemoria();
+          }
+        });
+      });
+    </script>
+  </body>
 </html>
