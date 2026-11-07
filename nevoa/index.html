@@ -5,214 +5,263 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel - Paredes, Luz e Névoa</title>
   <style>
-    :root {
-      color-scheme: dark;
-    }
-    * {
-      box-sizing: border-box;
-    }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 12px;
+      padding: 10px;
       font-family: system-ui, -apple-system, sans-serif;
       background: #14161f;
       color: #f1f5f9;
       font-size: 13px;
     }
-    h2 {
-      margin: 0 0 10px 0;
-      font-size: 15px;
-      color: #fde047;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
     }
-    .badge {
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: #1e293b;
-      color: #38bdf8;
+    .tab-btn {
+      min-height: 38px;
+      border-radius: 8px;
       border: 1px solid #334155;
+      background: #1e2436;
+      color: #94a3b8;
+      font-weight: 700;
+      cursor: pointer;
     }
+    .tab-btn.active {
+      background: #eab308;
+      color: #0f172a;
+      border-color: #fde047;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
     .card {
-      padding: 12px;
+      padding: 10px;
       border-radius: 10px;
       background: #1d212f;
       border: 1px solid #2e354b;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     .card-title {
       font-weight: 700;
       font-size: 13px;
       margin-bottom: 8px;
-      color: #e2e8f0;
+      color: #fde047;
+      display: flex;
+      justify-content: space-between;
     }
-    /* Botões grandes para mouse, toque e caneta */
     .btn-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 6px;
     }
     button {
-      min-height: 44px;
-      padding: 8px 12px;
+      min-height: 42px;
+      padding: 6px 10px;
       border-radius: 8px;
       border: 1px solid #3b4256;
       background: #283044;
       color: #f8fafc;
       font-weight: 600;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
-      transition: filter 0.15s;
     }
-    button:hover:not(:disabled) {
-      filter: brightness(1.15);
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    button:hover:not(:disabled) { filter: brightness(1.15); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-concluir {
       grid-column: span 2;
       background: #16a34a;
       border-color: #22c55e;
-      color: #ffffff;
       font-size: 14px;
     }
-    .btn-cancelar {
-      background: #991b1b;
+    .btn-perigo {
+      background: #7f1d1d;
       border-color: #ef4444;
     }
     .row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       gap: 8px;
     }
-    .row label {
-      flex: 1;
-      color: #cbd5e1;
+    .row label { flex: 1; color: #cbd5e1; }
+    input[type="range"] { width: 115px; }
+    input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+    input[type="color"] { width: 42px; height: 28px; border: none; background: none; cursor: pointer; }
+    select, input[type="number"] {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 5px 8px;
     }
-    input[type="range"] {
-      width: 125px;
-    }
-    input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-    }
-    .hint {
-      font-size: 11px;
-      color: #94a3b8;
-      line-height: 1.35;
-      margin-top: 4px;
-    }
+    .hint { font-size: 11px; color: #94a3b8; line-height: 1.35; }
   </style>
 </head>
 <body>
-  <h2>
-    <span>1. Parede com Lápis</span>
-    <span id="contadorParedes" class="badge">0 paredes</span>
-  </h2>
+  <!-- Navegação entre as 3 funções -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tab-paredes">1. Paredes</button>
+    <button class="tab-btn" data-tab="tab-luz">2. Luz Falloff</button>
+    <button class="tab-btn" data-tab="tab-nevoa">3. Névoa</button>
+  </div>
 
-  <!-- Ações principais dos traços riscados (Botões grandes) -->
-  <div class="card">
-    <div class="card-title">
-      Traços no mapa (<span id="qtdTracos">0</span> pendente(s))
+  <!-- ABA 1: PAREDE COM LÁPIS -->
+  <div id="tab-paredes" class="tab-pane active">
+    <div class="card">
+      <div class="card-title">
+        <span>Traços Riscados: <b id="lblTracos">0</b></span>
+        <span>Salvas: <b id="lblParedes">0</b></span>
+      </div>
+      <div class="btn-grid">
+        <button id="btnConcluir" class="btn-concluir" disabled>
+          ✓ Concluir e Organizar Parede
+        </button>
+        <button id="btnDesfazerTraco" disabled>↩ Desfazer Traço</button>
+        <button id="btnCancelar" class="btn-perigo" disabled>✕ Cancelar</button>
+      </div>
+      <div class="hint">
+        Risque no mapa arrastando o mouse (ou clique no Ponto 1 e depois no Ponto 2). Depois clique em <b>Concluir</b>.
+      </div>
     </div>
-    <div class="btn-grid">
-      <button id="btnConcluir" class="btn-concluir" disabled>
-        ✓ Concluir e Organizar Parede
+
+    <div class="card">
+      <div class="card-title">Ajustes do Traço (Tempo Real)</div>
+      <div class="row">
+        <label>Modo Linha Reta ao arrastar</label>
+        <input type="checkbox" id="chkLinhaReta" />
+      </div>
+      <div class="row">
+        <label>Simplificar (RDP): <b id="valRDP">12</b>px</label>
+        <input type="range" id="rngRDP" min="2" max="40" value="12" />
+      </div>
+      <div class="row">
+        <label>Endireitar Retas: <b id="valAngulo">8</b>°</label>
+        <input type="range" id="rngAngulo" min="0" max="20" value="8" />
+      </div>
+      <div class="row">
+        <label>Aceitar Diagonais de 45°</label>
+        <input type="checkbox" id="chkDiag45" checked />
+      </div>
+      <div class="row">
+        <label>Alinhar Pontas ao Grid</label>
+        <input type="checkbox" id="chkGrid" />
+      </div>
+      <div class="row">
+        <label>Raio p/ Grudar/Fechar: <b id="valSnap">25</b>px</label>
+        <input type="range" id="rngSnap" min="0" max="60" value="25" />
+      </div>
+      <div class="row">
+        <label>Mostrar paredes laranjas (Mestre)</label>
+        <input type="checkbox" id="chkMostrarParedes" checked />
+      </div>
+      <div class="row">
+        <label>Bloquear movimento de tokens</label>
+        <input type="checkbox" id="chkBloquearTokens" checked />
+      </div>
+      <button id="btnApagarParedes" class="btn-perigo" style="width: 100%; margin-top: 4px;">
+        Apagar Todas as Paredes
       </button>
-      <button id="btnDesfazerTraco" disabled>
-        ↩ Desfazer Traço
-      </button>
-      <button id="btnCancelar" class="btn-cancelar" disabled>
-        ✕ Cancelar
-      </button>
-    </div>
-    <div class="hint">
-      Dica: Selecione o ícone de sol na barra lateral do Owlbear, risque um ou vários traços no mapa (veja a prévia verde em tempo real) e clique em <b>Concluir</b>.
     </div>
   </div>
 
-  <!-- Controles de organização em tempo real -->
-  <div class="card">
-    <div class="card-title">Ajustes do Traço (Prévia em Tempo Real)</div>
-
-    <div class="row">
-      <label for="chkLinhaReta">Modo Linha Reta (ou segure Shift)</label>
-      <input type="checkbox" id="chkLinhaReta" />
+  <!-- ABA 2: LUZ COM FALLOFF E FERRAMENTA [LUZ] -->
+  <div id="tab-luz" class="tab-pane">
+    <div class="card">
+      <div class="card-title">Ferramenta [Luz] (Luzes Soltas)</div>
+      <button id="btnCriarLuzCentro" class="btn-concluir" style="width: 100%; margin-bottom: 8px;">
+        + Criar Fonte de [Luz] no Mapa
+      </button>
+      <div class="row">
+        <label>Cor Padrão da Luz</label>
+        <input type="color" id="corLuzPadrao" value="#ffe8b6" />
+      </div>
+      <div class="row">
+        <label>Falloff Padrão: <b id="valFalloff">0.50</b></label>
+        <input type="range" id="rngFalloff" min="0" max="1" step="0.05" value="0.5" />
+      </div>
     </div>
 
-    <div class="row">
-      <label for="rngRDP">Simplificar (RDP): <b id="valRDP">10</b>px</label>
-      <input type="range" id="rngRDP" min="2" max="35" step="1" value="10" />
-    </div>
-
-    <div class="row">
-      <label for="rngAngulo">Endireitar Retas: <b id="valAngulo">8</b>°</label>
-      <input type="range" id="rngAngulo" min="0" max="20" step="1" value="8" />
-    </div>
-
-    <div class="row">
-      <label for="chkDiag45">Aceitar Diagonais de 45°</label>
-      <input type="checkbox" id="chkDiag45" checked />
-    </div>
-
-    <div class="row">
-      <label for="chkGrid">Alinhar Pontas ao Grid</label>
-      <input type="checkbox" id="chkGrid" />
-    </div>
-
-    <div class="row">
-      <label for="chkMeiaCelula">Passo de Meia Célula no Grid</label>
-      <input type="checkbox" id="chkMeiaCelula" checked />
-    </div>
-
-    <div class="row">
-      <label for="rngSnap">Raio p/ Grudar/Fechar: <b id="valSnap">22</b>px</label>
-      <input type="range" id="rngSnap" min="0" max="50" step="2" value="22" />
+    <!-- Aparece quando o Mestre seleciona uma Luz Solta ou um Token no mapa -->
+    <div class="card" id="cardItemSelecionado">
+      <div class="card-title" id="tituloSelecionado">Selecione um Token ou [Luz] no mapa</div>
+      <div id="conteudoSelecionado" class="hint">
+        Clique em um Token de jogador ou em uma fonte de [Luz] no mapa para configurar o raio de Luz e Visão.
+      </div>
     </div>
   </div>
 
-  <!-- Histórico de Paredes Salvas -->
-  <div class="card">
-    <div class="card-title">Paredes da Cena (Desfazer / Refazer)</div>
-    <div class="btn-grid">
-      <button id="btnUndoParede" disabled>⟲ Desfazer Concluir</button>
-      <button id="btnRedoParede" disabled>⟳ Refazer Concluir</button>
+  <!-- ABA 3: MEMÓRIA DE NÉVOA (3 ESTADOS) -->
+  <div id="tab-nevoa" class="tab-pane">
+    <div class="card">
+      <div class="card-title">Névoa de 3 Estados + Memória</div>
+      <div class="row">
+        <label><b>Ativar Névoa e Memória na Cena</b></label>
+        <input type="checkbox" id="chkNevoaAtiva" checked />
+      </div>
+      <div class="row">
+        <label>Cor da "Névoa de Hoje" (Explorado)</label>
+        <input type="color" id="corNevoaExplorada" value="#181822" />
+      </div>
+      <div class="row">
+        <label>Opacidade Explorado: <b id="valOpNevoa">74</b>%</label>
+        <input type="range" id="rngOpNevoa" min="20" max="95" value="74" />
+      </div>
+      <div class="row">
+        <label>Visão do Mestre:</label>
+        <select id="selVisaoMestre">
+          <option value="TUDO">Mestre (Semi-transparente)</option>
+          <option value="PLAYERS">Ver como Players (100%)</option>
+        </select>
+      </div>
     </div>
 
-    <div class="row" style="margin-top: 6px;">
-      <label for="chkMostrarParedes">Mostrar linhas das paredes (Mestre)</label>
-      <input type="checkbox" id="chkMostrarParedes" checked />
+    <div class="card">
+      <div class="card-title">Controle da Memória dos Tokens</div>
+      <div class="btn-grid">
+        <button id="btnLimparMemToken">Limpar Token Selecionado</button>
+        <button id="btnLimparMemTudo" class="btn-perigo">Limpar Toda a Memória</button>
+      </div>
+      <div class="hint">
+        • <b>Nunca explorado:</b> Escuridão total (preto)<br/>
+        • <b>Já explorado (sem luz agora):</b> Névoa de hoje<br/>
+        • <b>Iluminado/visto agora:</b> Claro com falloff suave
+      </div>
     </div>
-
-    <div class="row">
-      <label for="chkBloquearTokens">Bloquear movimento de tokens</label>
-      <input type="checkbox" id="chkBloquearTokens" checked />
-    </div>
-
-    <button id="btnLimparTudo" style="width: 100%; margin-top: 4px; background: #3f1d28; border-color: #be123c;">
-      Apagar Todas as Paredes da Cena
-    </button>
   </div>
 
   <script type="module">
-    const canal = new BroadcastChannel("nevoa3em1_canal");
+    import OBR, { buildShape } from "https://esm.sh/@owlbear-rodeo/sdk@1.3.0";
 
-    const elQtdTracos = document.getElementById("qtdTracos");
-    const elContadorParedes = document.getElementById("contadorParedes");
+    const ID_EXT = "com.gaduarte14.nevoa3em1";
+    const CHAVE_PAREDES = `${ID_EXT}/paredes`;
+    const CHAVE_CONFIG = `${ID_EXT}/config`;
+    const CHAVE_TRACO_BRUTO = `${ID_EXT}/tracoBruto`;
+    const CHAVE_LUZ_SOLTA = `${ID_EXT}/luzSolta`;
+    const CHAVE_TOKEN_CFG = `${ID_EXT}/tokenCfg`;
+    const CHAVE_TOKEN_MEM = `${ID_EXT}/memoria`;
+    const PREFIXO_PREVIA = `${ID_EXT}_previa_`;
+
+    // Alternar Abas
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn, .tab-pane").forEach((el) => el.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      });
+    });
+
+    // Elementos da UI
+    const lblTracos = document.getElementById("lblTracos");
+    const lblParedes = document.getElementById("lblParedes");
     const btnConcluir = document.getElementById("btnConcluir");
     const btnDesfazerTraco = document.getElementById("btnDesfazerTraco");
     const btnCancelar = document.getElementById("btnCancelar");
-    const btnUndoParede = document.getElementById("btnUndoParede");
-    const btnRedoParede = document.getElementById("btnRedoParede");
-    const btnLimparTudo = document.getElementById("btnLimparTudo");
+    const btnApagarParedes = document.getElementById("btnApagarParedes");
 
     const chkLinhaReta = document.getElementById("chkLinhaReta");
     const rngRDP = document.getElementById("rngRDP");
@@ -221,99 +270,119 @@
     const valAngulo = document.getElementById("valAngulo");
     const chkDiag45 = document.getElementById("chkDiag45");
     const chkGrid = document.getElementById("chkGrid");
-    const chkMeiaCelula = document.getElementById("chkMeiaCelula");
     const rngSnap = document.getElementById("rngSnap");
     const valSnap = document.getElementById("valSnap");
     const chkMostrarParedes = document.getElementById("chkMostrarParedes");
     const chkBloquearTokens = document.getElementById("chkBloquearTokens");
 
-    function enviarConfigAtualizada() {
-      valRDP.textContent = rngRDP.value;
-      valAngulo.textContent = rngAngulo.value;
-      valSnap.textContent = rngSnap.value;
+    const btnCriarLuzCentro = document.getElementById("btnCriarLuzCentro");
+    const corLuzPadrao = document.getElementById("corLuzPadrao");
+    const rngFalloff = document.getElementById("rngFalloff");
+    const valFalloff = document.getElementById("valFalloff");
+    const tituloSelecionado = document.getElementById("tituloSelecionado");
+    const conteudoSelecionado = document.getElementById("conteudoSelecionado");
 
-      canal.postMessage({
-        acao: "ATUALIZAR_CONFIG",
-        novosValores: {
-          modoLinhaReta: chkLinhaReta.checked,
-          toleranciaRDP: Number(rngRDP.value),
-          toleranciaAnguloGraus: Number(rngAngulo.value),
-          aceitarDiagonais45: chkDiag45.checked,
-          alinharAoGrid: chkGrid.checked,
-          passoGridMeiaCelula: chkMeiaCelula.checked,
-          raioSnap: Number(rngSnap.value),
-          mostrarParedesMestre: chkMostrarParedes.checked,
-          bloquearMovimentoTokens: chkBloquearTokens.checked
-        }
+    const chkNevoaAtiva = document.getElementById("chkNevoaAtiva");
+    const corNevoaExplorada = document.getElementById("corNevoaExplorada");
+    const rngOpNevoa = document.getElementById("rngOpNevoa");
+    const valOpNevoa = document.getElementById("valOpNevoa");
+    const selVisaoMestre = document.getElementById("selVisaoMestre");
+    const btnLimparMemToken = document.getElementById("btnLimparMemToken");
+    const btnLimparMemTudo = document.getElementById("btnLimparMemTudo");
+
+    async function salvarConfig(parcial) {
+      const meta = await OBR.scene.getMetadata();
+      const atual = meta[CHAVE_CONFIG] || {};
+      await OBR.scene.setMetadata({
+        [CHAVE_CONFIG]: { ...atual, ...parcial }
       });
     }
 
-    [
-      chkLinhaReta,
-      rngRDP,
-      rngAngulo,
-      chkDiag45,
-      chkGrid,
-      chkMeiaCelula,
-      rngSnap,
-      chkMostrarParedes,
-      chkBloquearTokens
-    ].forEach((el) => el.addEventListener("input", enviarConfigAtualizada));
+    // Lê direto do Owlbear quantos traços provisórios e paredes existem
+    async function sincronizarPainel() {
+      if (!(await OBR.scene.isReady())) return;
+      const meta = await OBR.scene.getMetadata();
+      const cfg = meta[CHAVE_CONFIG] || {};
+      const paredes = meta[CHAVE_PAREDES]?.segmentos || [];
+      const locais = await OBR.scene.local.getItems();
+      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
 
-    btnConcluir.addEventListener("click", () =>
-      canal.postMessage({ acao: "CONCLUIR_TRACOS" })
-    );
-    btnDesfazerTraco.addEventListener("click", () =>
-      canal.postMessage({ acao: "DESFAZER_TRACO" })
-    );
-    btnCancelar.addEventListener("click", () =>
-      canal.postMessage({ acao: "CANCELAR_TRACOS" })
-    );
-    btnUndoParede.addEventListener("click", () =>
-      canal.postMessage({ acao: "DESFAZER_PAREDE" })
-    );
-    btnRedoParede.addEventListener("click", () =>
-      canal.postMessage({ acao: "REFAZER_PAREDE" })
-    );
-    btnLimparTudo.addEventListener("click", () => {
-      if (confirm("Deseja apagar todas as paredes desta cena?")) {
-        canal.postMessage({ acao: "LIMPAR_TODAS_PAREDES" });
+      lblTracos.textContent = brutos.length;
+      lblParedes.textContent = paredes.length;
+
+      const temBrutos = brutos.length > 0;
+      btnConcluir.disabled = !temBrutos;
+      btnDesfazerTraco.disabled = !temBrutos;
+      btnCancelar.disabled = !temBrutos;
+
+      chkLinhaReta.checked = Boolean(cfg.modoLinhaReta);
+      rngRDP.value = cfg.toleranciaRDP ?? 12;
+      valRDP.textContent = rngRDP.value;
+      rngAngulo.value = cfg.toleranciaAnguloGraus ?? 8;
+      valAngulo.textContent = rngAngulo.value;
+      chkDiag45.checked = cfg.aceitarDiagonais45 !== false;
+      chkGrid.checked = Boolean(cfg.alinharAoGrid);
+      rngSnap.value = cfg.raioSnap ?? 25;
+      valSnap.textContent = rngSnap.value;
+      chkMostrarParedes.checked = cfg.mostrarParedesMestre !== false;
+      chkBloquearTokens.checked = cfg.bloquearMovimentoTokens !== false;
+
+      corLuzPadrao.value = cfg.corLuzPadrao || "#ffe8b6";
+      rngFalloff.value = cfg.falloffPadrao ?? 0.5;
+      valFalloff.textContent = Number(rngFalloff.value).toFixed(2);
+
+      chkNevoaAtiva.checked = cfg.nevoaAtiva !== false;
+      corNevoaExplorada.value = cfg.corNevoaExplorada || "#181822";
+      rngOpNevoa.value = Math.round((cfg.opacidadeNevoaExplorada ?? 0.74) * 100);
+      valOpNevoa.textContent = rngOpNevoa.value;
+      selVisaoMestre.value = cfg.modoVisaoMestre || "TUDO";
+
+      await atualizarCardSelecao();
+    }
+
+    // Concluir paredes: converte as prévias verdes em paredes definitivas da cena!
+    btnConcluir.addEventListener("click", async () => {
+      const locais = await OBR.scene.local.getItems();
+      const previas = locais.filter((i) => i.id.startsWith(PREFIXO_PREVIA));
+      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
+
+      const meta = await OBR.scene.getMetadata();
+      const atuais = meta[CHAVE_PAREDES]?.segmentos || [];
+      const novas = [...atuais];
+
+      for (const p of previas) {
+        if (p.points && p.points.length >= 2) {
+          novas.push({
+            id: `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            x1: p.points[0].x,
+            y1: p.points[0].y,
+            x2: p.points[1].x,
+            y2: p.points[1].y,
+            porta: false,
+            aberta: false
+          });
+        }
+      }
+
+      await OBR.scene.local.deleteItems([...previas.map((i) => i.id), ...brutos.map((i) => i.id)]);
+      await OBR.scene.setMetadata({
+        [CHAVE_PAREDES]: { atualizadoEm: Date.now(), segmentos: novas }
+      });
+      await OBR.notification.show(`${previas.length} parede(s) concluída(s)!`, "SUCCESS");
+      await sincronizarPainel();
+    });
+
+    btnDesfazerTraco.addEventListener("click", async () => {
+      const locais = await OBR.scene.local.getItems();
+      const brutos = locais.filter((i) => Boolean(i.metadata?.[CHAVE_TRACO_BRUTO]));
+      if (brutos.length > 0) {
+        await OBR.scene.local.deleteItems([brutos[brutos.length - 1].id]);
+        await salvarConfig({ _at: Date.now() });
+        await sincronizarPainel();
       }
     });
 
-    canal.onmessage = (ev) => {
-      const msg = ev.data;
-      if (!msg || msg.tipo !== "ESTADO_ATUALIZADO") return;
-
-      elQtdTracos.textContent = msg.qtdTracosPendentes;
-      elContadorParedes.textContent = `${msg.qtdParedesSalvas} parede(s)`;
-
-      const temPendentes = msg.qtdTracosPendentes > 0;
-      btnConcluir.disabled = !temPendentes;
-      btnDesfazerTraco.disabled = !temPendentes;
-      btnCancelar.disabled = !temPendentes;
-
-      btnUndoParede.disabled = !msg.podeDesfazer;
-      btnRedoParede.disabled = !msg.podeRefazer;
-
-      if (msg.configCena) {
-        chkLinhaReta.checked = Boolean(msg.configCena.modoLinhaReta);
-        rngRDP.value = msg.configCena.toleranciaRDP ?? 10;
-        valRDP.textContent = rngRDP.value;
-        rngAngulo.value = msg.configCena.toleranciaAnguloGraus ?? 8;
-        valAngulo.textContent = rngAngulo.value;
-        chkDiag45.checked = Boolean(msg.configCena.aceitarDiagonais45);
-        chkGrid.checked = Boolean(msg.configCena.alinharAoGrid);
-        chkMeiaCelula.checked = Boolean(msg.configCena.passoGridMeiaCelula);
-        rngSnap.value = msg.configCena.raioSnap ?? 22;
-        valSnap.textContent = rngSnap.value;
-        chkMostrarParedes.checked = Boolean(msg.configCena.mostrarParedesMestre);
-        chkBloquearTokens.checked = Boolean(msg.configCena.bloquearMovimentoTokens);
-      }
-    };
-
-    // Pede o estado inicial assim que abre o painel
-    canal.postMessage({ acao: "PEDIR_ESTADO" });
-  </script>
-</body>
-</html>
+    btnCancelar.addEventListener("click", async () => {
+      const locais = await OBR.scene.local.getItems();
+      const ids = locais
+        .filter((i) => i.id.startsWith(PREFIXO_PRE
