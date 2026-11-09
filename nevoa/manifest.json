@@ -1,15 +1,14 @@
 {
-  "name": "Parede, Luz e Névoa (3 em 1)",
+  "name": "Névoa & Luz Prática",
   "version": "1.0.0",
   "manifest_version": 1,
-  "author": "Gaduarte14",
-  "description": "Desenho de paredes a lápis/linha/porta, iluminação com falloff e memória de névoa automática.",
+  "author": "Seu Nome",
+  "description": "Paredes práticas, névoa individual e luz com degradê em pés (ft).",
   "action": {
-    "title": "Parede, Luz e Névoa (3 em 1)",
-    "icon": "/nevoa/icon.svg",
+    "title": "Névoa & Luz (ft)",
+    "icon": "https://cdn-icons-png.flaticon.com/512/702/702814.png",
     "popover": "/nevoa/index.html",
-    "width": 390,
-    "height": 600
-  },
-  "background_url": "/nevoa/background.html"
+    "height": 420,
+    "width": 300
+  }
 }
