@@ -9,37 +9,54 @@
       color: #ffffff;
       font-family: sans-serif;
       margin: 0;
-      padding: 15px;
-      font-size: 14px;
+      padding: 12px;
+      font-size: 13px;
     }
-    h3 { margin-top: 0; color: #bb86fc; border-bottom: 1px solid #333; padding-bottom: 5px; }
+    h3 { margin: 10px 0 6px 0; color: #bb86fc; border-bottom: 1px solid #333; padding-bottom: 4px; font-size: 14px; }
+    h3:first-child { margin-top: 0; }
     .btn {
       width: 100%; padding: 8px; margin-bottom: 6px;
       background: #2b2b36; color: white; border: 1px solid #444;
       border-radius: 6px; cursor: pointer; text-align: left;
-      transition: 0.2s;
+      transition: 0.2s; font-size: 12px;
     }
     .btn:hover { background: #3f3f4e; border-color: #bb86fc; }
-    .btn.active { background: #bb86fc; color: #000; font-weight: bold; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-    input {
+    .btn.active { background: #bb86fc; color: #000; font-weight: bold; border-color: #fff; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+    input, select {
       width: 100%; padding: 6px; box-sizing: border-box;
       background: #121216; border: 1px solid #444; color: white; border-radius: 4px;
+      margin-bottom: 8px; font-size: 12px;
     }
-    label { font-size: 12px; color: #aaa; display: block; margin-bottom: 3px; }
-    .status { font-size: 12px; color: #4caf50; margin-top: 10px; text-align: center; }
+    label { font-size: 11px; color: #aaa; display: block; margin-bottom: 3px; }
+    .status {
+      font-size: 12px; color: #4caf50; margin-top: 8px; padding: 6px;
+      background: #121216; border-radius: 4px; text-align: center;
+    }
   </style>
 </head>
 <body>
 
-  <h3>🧱 Criação de Paredes (GM)</h3>
-  <div class="grid-2">
-    <button id="btn-wall" class="btn">✏️ Desenhar Parede</button>
-    <button id="btn-door" class="btn">🚪 Criar Porta</button>
+  <div id="gm-controls">
+    <h3>🧱 Paredes e Névoa (Mestre)</h3>
+    <div class="grid-2">
+      <button id="btn-wall" class="btn">✏️ Desenhar Parede</button>
+      <button id="btn-door" class="btn">🚪 Criar Porta</button>
+    </div>
+    <div class="grid-2">
+      <button id="btn-toggle-fog" class="btn">🌫️ Ligar/Desl. Névoa</button>
+      <button id="btn-clear-walls" class="btn" style="color: #ff6b6b;">🗑️ Limpar Paredes</button>
+    </div>
   </div>
-  <button id="btn-toggle-fog" class="btn">🌫️ Ativar Névoa no Mapa</button>
 
-  <h3>💡 Luz do Token Selecionado (ft)</h3>
+  <h3>💡 Luz do Token (em Pés / ft)</h3>
+  
+  <label>👁️ Quem enxerga a luz deste Token?</label>
+  <select id="select-owner">
+    <option value="ALL">🌐 Todos os Jogadores (Luz Pública)</option>
+    <!-- Os jogadores da sala aparecerão aqui automaticamente -->
+  </select>
+
   <div class="grid-2">
     <button class="btn preset" data-bright="20" data-dim="40">🔥 Tocha (20/40ft)</button>
     <button class="btn preset" data-bright="30" data-dim="60">🏮 Lanterna (30/60ft)</button>
@@ -57,13 +74,13 @@
       <input type="number" id="input-dim" value="40" step="5">
     </div>
   </div>
+
   <button id="btn-apply-light" class="btn" style="text-align: center; background: #bb86fc; color: #000; font-weight: bold;">
-    Aplicar Luz no Token
+    ✨ Aplicar Luz no Token Selecionado
   </button>
 
-  <div id="status-msg" class="status">Selecione um token na mesa!</div>
+  <div id="status-msg" class="status">Carregando...</div>
 
-  <!-- Importa o nosso cérebro JS -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
