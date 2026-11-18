@@ -1,8 +1,8 @@
 {
   "name": "Character Forger",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "manifest_version": 1,
-  "description": "Ficha de personagem de D&D 5e para jogadores. Não salva: use exportar/importar.",
+  "description": "Ficha de personagem de D&D 5e para jogadores. Salva automaticamente na mesa do Owlbear e no aparelho, além de exportar/importar.",
   "icon": "/ficha/icon.png",
   "action": {
     "title": "Character Forger",

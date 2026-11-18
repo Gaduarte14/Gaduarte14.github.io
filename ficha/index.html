@@ -103,6 +103,11 @@ const els=()=>[...document.querySelectorAll('[data-k]')];
 const V=k=>document.querySelector(`[data-k="${k}"]`);
 const num=k=>parseInt(V(k).value)||0, ck=k=>V(k).checked;
 const mod=k=>Math.floor((num('a_'+k)-10)/2);
+
+// Guarda os valores padrões para restaurar ao limpar ou carregar outra ficha
+const DEFAULTS={};
+els().forEach(e=>DEFAULTS[e.dataset.k]=e.type=='checkbox'?e.checked:e.value);
+
 let pb=2;
 function calc(){
   pb=2+Math.floor((Math.max(1,num('nivel'))-1)/4);
@@ -114,32 +119,127 @@ function calc(){
   const c=V('conj').value;
   $('#cd').textContent=c?8+pb+mod(c):'—';$('#am').textContent=c?sg(pb+mod(c)):'—';
 }
-document.addEventListener('input',calc);document.addEventListener('change',calc);
+
+// ===== Sistema de salvamento no Owlbear e no aparelho (baseado no Scribe!) =====
+const SAVE_KEY='com.gaduart.forger/sheet', LS_KEY='forger-v1';
+const LIMIT=1024*1024;
+const bytes=s=>new Blob([s]).size;
+let sheetTs=0, lt=null, ot=null;
+
+// Só guarda os campos que diferem do padrão para economizar espaço no metadata do Owlbear
+const fgData=()=>{
+  const d={};
+  els().forEach(e=>{
+    const v=e.type=='checkbox'?e.checked:e.value;
+    if(v!==DEFAULTS[e.dataset.k])d[e.dataset.k]=v;
+  });
+  return d;
+};
+
+function applyData(d){
+  els().forEach(el=>{
+    const k=el.dataset.k;
+    const val=(d&&k in d)?d[k]:DEFAULTS[k];
+    if(el.type=='checkbox')el.checked=!!val;else el.value=val;
+  });
+  calc();
+}
+
+function localLoad(){
+  try{
+    const v=JSON.parse(localStorage.getItem(LS_KEY));
+    if(v&&typeof v.dados==='object')return v;
+  }catch(e){}
+  return null;
+}
+
+function localSave(){
+  clearTimeout(lt);
+  lt=setTimeout(()=>{
+    try{localStorage.setItem(LS_KEY,JSON.stringify({ts:sheetTs,dados:fgData()}))}
+    catch(e){setStatus('● Não consegui salvar neste aparelho.',false,true)}
+  },250);
+}
+
+function obrSave(){
+  clearTimeout(ot);
+  ot=setTimeout(pushObr,900);
+}
+
+async function pushObr(){
+  if(!ready||!OBR)return;
+  const payload={ts:sheetTs,dados:fgData()};
+  if(bytes(JSON.stringify(payload))>LIMIT){
+    setStatus('● Passou de 1 MB: salvando só neste aparelho.',false,true);
+    return;
+  }
+  try{
+    await OBR.player.setMetadata({[SAVE_KEY]:payload});
+    setStatus('● Salvo no Owlbear e neste aparelho',true);
+  }catch(e){
+    setStatus('● O Owlbear recusou salvar ('+((e&&e.message)||'erro')+'). Ficou só neste aparelho.',false,true);
+  }
+}
+
+function changed(){
+  sheetTs=Date.now();
+  localSave();
+  obrSave();
+  setStatus(ready?'● Salvando…':'● Salvo neste aparelho (sem conexão)',false,!ready);
+}
+
+async function loadFromObr(){
+  const meta=await OBR.player.getMetadata();
+  const rem=meta[SAVE_KEY];
+  const loc=localLoad();
+  const remote=(rem&&typeof rem.dados==='object')?{ts:rem.ts||0,dados:rem.dados}:null;
+  if(remote&&(!loc||remote.ts>=loc.ts)){
+    sheetTs=remote.ts;
+    applyData(remote.dados);
+    try{localStorage.setItem(LS_KEY,JSON.stringify(remote))}catch(e){}
+  }else if(loc){
+    sheetTs=loc.ts||Date.now();
+    applyData(loc.dados);
+    pushObr();
+  }
+}
+
+document.addEventListener('input',()=>{calc();changed()});
+document.addEventListener('change',()=>{calc();changed()});
 
 let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3500)}
 const ENGINE='https://gaduarte14.github.io/dados/engine.js',KEY='com.gaduart.bards-dice/rolls',IKEY='com.gaduart.warpath/init';
 let OBR=null,ready=false,eng=null,mode=null,readyRes;
 const readyP=new Promise(r=>readyRes=r);
 const engP=import(ENGINE).then(m=>(eng=m)).catch(()=>null);
-const setStatus=(t,ok)=>{const s=$('#st');s.textContent=t;s.style.color=ok?'#7fc98f':'var(--mut)'};
-function onSdkReady(){if(ready)return;ready=true;OBR=window.__sdk;readyRes();setStatus('● Conectado ao Owlbear',true);try{sessionStorage.removeItem('fg-tries')}catch(e){}}
+const setStatus=(t,ok,warn)=>{const s=$('#st');s.textContent=t;s.style.color=ok?'#7fc98f':(warn?'var(--rd)':'var(--mut)')};
+
+async function onSdkReady(){
+  if(ready)return;
+  OBR=window.__sdk;
+  try{await loadFromObr()}catch(e){}
+  ready=true;
+  readyRes();
+  setStatus('● Salvo no Owlbear e neste aparelho',true);
+  try{sessionStorage.removeItem('fg-tries')}catch(e){}
+}
 if(window.__sdkReady)onSdkReady();else addEventListener('sdkready',onSdkReady);
+
 // Se o SDK principal não baixar em 6s, tenta o link reserva.
 setTimeout(async()=>{if(window.__sdk||ready)return;try{const o=(await import('https://esm.sh/@owlbear-rodeo/sdk@3')).default;window.__sdk=o;o.onReady(()=>{window.__sdkReady=true;dispatchEvent(new Event('sdkready'))})}catch(e){}},6000);
 // Mostra o que está acontecendo.
 setTimeout(()=>{if(!ready)setStatus(window.__sdk?'● SDK carregou; aguardando o Owlbear…':'● Baixando o SDK do Owlbear…',false)},3000);
-// Se o Owlbear não responder em 12s, recarrega a ficha (até 2 vezes) guardando o que você preencheu
-// só durante o recarregamento, e restaurando logo depois.
+// Se o Owlbear não responder em 12s, recarrega a ficha (até 2 vezes) guardando o que você preencheu.
 const fgTries=(()=>{try{return +sessionStorage.getItem('fg-tries')||0}catch(e){return 0}})();
-const fgData=()=>{const d={};els().forEach(e=>d[e.dataset.k]=e.type=='checkbox'?e.checked:e.value);return d};
 setTimeout(()=>{
   if(ready)return;
-  if(fgTries<2){try{sessionStorage.setItem('fg-recover',JSON.stringify(fgData()));sessionStorage.setItem('fg-tries',fgTries+1)}catch(e){}location.reload();return}
-  setStatus(window.__sdk?'● O Owlbear não respondeu.':'● Não consegui baixar o SDK (rede).',false);
+  if(fgTries<2){try{localStorage.setItem(LS_KEY,JSON.stringify({ts:sheetTs||Date.now(),dados:fgData()}));sessionStorage.setItem('fg-tries',fgTries+1)}catch(e){}location.reload();return}
+  setStatus(window.__sdk?'● O Owlbear não respondeu (salvo neste aparelho).':'● Não consegui baixar o SDK (salvo neste aparelho).',false,true);
   const b=document.createElement('button');b.className='alt sm';b.textContent='Tentar de novo';
-  b.onclick=()=>{try{sessionStorage.setItem('fg-recover',JSON.stringify(fgData()));sessionStorage.removeItem('fg-tries')}catch(e){}location.reload()};
+  b.onclick=()=>{try{localStorage.setItem(LS_KEY,JSON.stringify({ts:sheetTs||Date.now(),dados:fgData()}));sessionStorage.removeItem('fg-tries')}catch(e){}location.reload()};
   $('#st').after(b);
 },12000);
+
 // Rola com o motor do Rollhaven e compartilha no mesmo formato do chat dele
 async function doRoll(text,prefix,isInit){
   let rolls;
@@ -190,14 +290,33 @@ $('#exp').onclick=()=>{
 $('#imp').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{
   const f=e.target.files[0];if(!f)return;const r=new FileReader();
-  r.onload=()=>{try{const d=JSON.parse(r.result).dados;
-    els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]});
-    calc();toast('Ficha importada!')}catch(x){toast('Arquivo inválido')}};
+  r.onload=()=>{try{
+    const parsed=JSON.parse(r.result);
+    const d=parsed.dados||parsed;
+    if(!d||typeof d!=='object')throw new Error('Inválido');
+    applyData(d);
+    changed();
+    msScan(msMeta);
+    toast('Ficha importada e salva na mesa!');
+  }catch(x){toast('Arquivo inválido')}};
   r.readAsText(f);e.target.value='';
 };
-$('#clr').onclick=()=>{if(confirm('Limpar a ficha inteira?'))location.reload()};
-try{const rc=sessionStorage.getItem('fg-recover');if(rc){sessionStorage.removeItem('fg-recover');const d=JSON.parse(rc);els().forEach(el=>{if(!(el.dataset.k in d))return;if(el.type=='checkbox')el.checked=!!d[el.dataset.k];else el.value=d[el.dataset.k]})}}catch(e){}
-calc();
+$('#clr').onclick=()=>{
+  if(!confirm('Limpar a ficha inteira? Isso também apaga a ficha salva na mesa.'))return;
+  applyData({});
+  changed();
+  toast('Ficha limpa!');
+};
+
+// Início imediato carregando o cache local (igual ao Scribe!)
+{
+  try{
+    const rc=sessionStorage.getItem('fg-recover');
+    if(rc){sessionStorage.removeItem('fg-recover');sheetTs=Date.now();applyData(JSON.parse(rc));localSave();}
+    else{const l=localLoad();if(l){sheetTs=l.ts||0;applyData(l.dados);}}
+  }catch(e){}
+  calc();
+}
 
 // ===== Rolar GM: manda só a fórmula pro Master Shield do mestre; quem rola e vê o resultado é só ele =====
 const MSG='com.gaduart.master-shield/g-',gmenu=$('#gmenu');
@@ -253,6 +372,7 @@ function msScan(m){
     const c=msCalc(num('pv'),num('pvt'),v.total);
     if(c.depois!==c.antes)V('pv').value=c.depois;
     if(c.abs>0)V('pvt').value=c.pvtDepois;
+    changed();
     toast('💥 '+(v.alvo||'Dano')+': −'+v.total+' de dano'+(c.abs?' ('+c.abs+' no PV temp.)':'')+' · PV '+c.antes+' → '+c.depois);
     // Marca como usado (null) e avisa o mestre.
     window.__sdk.room.setMetadata({[k]:null,[MSA+v.id]:{id:v.id,antes:c.antes,depois:c.depois,abs:c.abs,ts:Date.now()}}).catch(()=>{});
