@@ -4,17 +4,17 @@
 import OBR, { isImage } from "https://esm.sh/@owlbear-rodeo/sdk@3";
 export const ID = "br.condicao";
 /** Metadata do token: condições ativas */
-export const META_ESTADO = `${ID}/estado`;
+export const META_ESTADO = ${ID}/estado;
 /** Metadata dos itens de ícone/texto criados pela extensão */
-export const META_ICONE = `${ID}/icone`;
+export const META_ICONE = ${ID}/icone;
 /** Lê as condições gravadas no token. */
 export function lerEstado(item) {
     const m = item.metadata[META_ESTADO];
     return m && m.condicoes ? m : { condicoes: {} };
 }
-/** Só imagens nas camadas de personagem/montaria contam como token. */
+/** Só imagens nas camadas de personagem/montaria/objeto contam como token. */
 export function ehToken(item) {
-    return isImage(item) && (item.layer === "CHARACTER" || item.layer === "MOUNT");
+    return isImage(item) && (item.layer === "CHARACTER" || item.layer === "MOUNT" || item.layer === "PROP");
 }
 /**
  * Altera as condições de vários tokens de uma vez.
