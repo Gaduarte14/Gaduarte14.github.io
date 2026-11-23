@@ -1,0 +1,17 @@
+{
+  "name": "Condições D&D 5e",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Gerencia as condições de D&D 5e nos tokens, com ícones sobre o token, rodadas e painel do mestre.",
+  "author": "Condições 5e",
+  "icon": "icon.svg",
+  "homepage_url": "https://example.com",
+  "background_url": "index.html",
+  "action": {
+    "title": "Painel de Condições",
+    "icon": "icon.svg",
+    "popover": "gm.html",
+    "width": 440,
+    "height": 600
+  }
+}
