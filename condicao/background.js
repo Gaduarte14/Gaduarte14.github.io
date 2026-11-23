@@ -50,9 +50,9 @@ async function itensDoToken(token, dpi) {
         const sig = [c.id, Math.round(b.width), i, ativas.length, dados.nivel ?? 0, pulsar ? 1 : 0].join("|");
         const meta = { tokenId: token.id, sig, base: escala, pulsar };
         out.push({
-            id: `${ID}:${token.id}:${c.id}`, sig, tokenId: token.id, base: escala, pulsar,
+            id: ${ID}:${token.id}:${c.id}, sig, tokenId: token.id, base: escala, pulsar,
             construir: () => buildImage({ width: LADO_BASE, height: LADO_BASE, mime: "image/svg+xml", url: urlIcone(c) }, { dpi: LADO_BASE, offset: { x: LADO_BASE / 2, y: LADO_BASE / 2 } })
-                .id(`${ID}:${token.id}:${c.id}`)
+                .id(${ID}:${token.id}:${c.id})
                 .name(c.nome)
                 .position({ x, y })
                 .scale({ x: escala, y: escala })
@@ -66,7 +66,7 @@ async function itensDoToken(token, dpi) {
         });
         // Exaustão: número do nível sobre o ícone
         if (c.comNivel) {
-            const idTxt = `${ID}:${token.id}:${c.id}:nivel`;
+            const idTxt = ${ID}:${token.id}:${c.id}:nivel;
             out.push({
                 id: idTxt, sig, tokenId: token.id, base: escala, pulsar: false,
                 construir: () => buildText()
@@ -172,15 +172,17 @@ async function pulsar() {
 OBR.onReady(() => {
     // Menu de contexto (clique direito) nos tokens
     OBR.contextMenu.create({
-        id: `${ID}/menu`,
+        id: ${ID}/menu,
         icons: [
             {
                 icon: abs("icon.svg"),
                 label: "Condições",
                 filter: {
-                    every: [
-                        { key: "layer", value: "CHARACTER", coordinator: "||" },
+                    every: [{ key: "type", value: "IMAGE" }],
+                    some: [
+                        { key: "layer", value: "CHARACTER" },
                         { key: "layer", value: "MOUNT" },
+                        { key: "layer", value: "PROP" },
                     ],
                 },
             },
@@ -188,7 +190,7 @@ OBR.onReady(() => {
         onClick(contexto, elementoId) {
             const ids = contexto.items.map((i) => i.id).join(",");
             OBR.popover.open({
-                id: `${ID}/popover`,
+                id: ${ID}/popover,
                 url: abs("popover.html") + "?ids=" + encodeURIComponent(ids),
                 width: 360,
                 height: 500,
