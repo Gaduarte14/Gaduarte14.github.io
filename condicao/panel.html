@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Condições D&D 5e — Painel do Mestre</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@owlbear-rodeo/sdk": "https://esm.sh/@owlbear-rodeo/sdk@3"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="header">
+        <div class="header-title-wrap">
+          <div class="header-title">Condições D&D 5e</div>
+          <div id="roleSubtitle" class="header-subtitle">Painel do Mestre</div>
+        </div>
+        <div class="header-actions">
+          <button id="btnAdvanceRound" class="btn-primary btn-sm" title="Decrementa 1 rodada de todas as condições com contador">
+            −1 Rodada (Todos)
+          </button>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button id="tabTokens" class="tab-btn active">Tokens da Cena</button>
+        <button id="tabRules" class="tab-btn">Regras (15)</button>
+      </nav>
+
+      <section id="filtersBar" class="filters-bar">
+        <div class="filters-row">
+          <input id="searchInput" type="text" placeholder="Buscar token pelo nome..." />
+        </div>
+        <div class="filters-row">
+          <select id="conditionFilter">
+            <option value="">Todas as condições</option>
+          </select>
+          <label class="checkbox-label">
+            <input id="onlyActiveCheckbox" type="checkbox" />
+            Só com condição
+          </label>
+        </div>
+      </section>
+
+      <main id="panelContent" class="scroll-area">
+        <div class="empty-state">Carregando cena...</div>
+      </main>
+
+      <footer class="rule-footer">
+        <div id="panelRuleTitle" class="rule-footer-title">Resumo da Regra</div>
+        <div id="panelRuleBody" class="rule-footer-body">
+          Passe o mouse sobre qualquer condição para consultar o efeito em D&D 5e.
+        </div>
+      </footer>
+    </div>
+
+    <script type="module" src="./js/panel.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "Condições D&D 5e",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "author": "Gaduarte14",
+  "description": "Gerencia todas as 15 condições de D&D 5e nos tokens com ícones anexados, Exaustão 1–6, contador de rodadas e Painel do Mestre.",
+  "icon": "icon.svg",
+  "background_url": "background.html",
+  "action": {
+    "title": "Condições D&D 5e — Painel do Mestre",
+    "icon": "icon.svg",
+    "popover": "panel.html",
+    "height": 640,
+    "width": 430
+  }
+}
