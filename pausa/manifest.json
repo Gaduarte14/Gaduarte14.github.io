@@ -1,8 +1,8 @@
 {
   "name": "Tavern Break",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "manifest_version": 1,
-  "description": "Pausa do RPG: o mestre escolhe um minigame (cobra ou tetris) e todos jogam em tela cheia, com pontuação e recorde salvos.",
+  "description": "Pausa do RPG: o mestre escolhe um minigame (cobra, tetris ou come-come) e todos jogam em tela cheia, com pontuação e recorde salvos. Também tem a tela preta \"Já voltamos com o RPG\".",
   "author": "Gaduart",
   "icon": "/pausa/icon.svg",
   "background_url": "/pausa/background.html",

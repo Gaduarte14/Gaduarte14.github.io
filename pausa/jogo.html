@@ -42,6 +42,13 @@ canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
 #rank li.me{color:var(--gold);font-weight:700}
 #pad{display:flex;justify-content:center;gap:10px;padding:6px 14px 12px}
 #pad button{min-width:60px;height:54px;font-size:22px;padding:0}
+#brbv{display:none;position:fixed;inset:0;z-index:5;background:#000;color:var(--ink);align-items:center;justify-content:center;text-align:center;padding:24px;font:700 clamp(30px,8vw,80px)/1.2 Georgia,serif}
+body.brb{background:#000}
+body.brb main,body.brb footer{display:none}
+body.brb #brbv{display:flex}
+body.brb header{position:fixed;top:0;left:0;right:0;z-index:6;border:0;justify-content:flex-end;background:none}
+body.brb header>*:not(#exit){display:none}
+body.brb #exit{opacity:.4}
 </style></head><body>
 <header>
   <div class="t" id="gname">Cobra</div>
@@ -68,14 +75,16 @@ canvas{background:#0e0c18;border:2px solid var(--line);border-radius:6px}
   </div>
 </main>
 <footer id="pad"></footer>
+<div id="brbv">Já voltamos com o RPG</div>
 <script type="module">
 const Q = new URLSearchParams(location.search);
-const G = ["tetris", "pac"].includes(Q.get("g")) ? Q.get("g") : "snake";
+const G = ["tetris", "pac", "brb"].includes(Q.get("g")) ? Q.get("g") : "snake";
 const $ = id => document.getElementById(id);
 const P = "com.gaduart.pausa/", KR = P + "r-", MID = P + "game";
-const NAMES = { snake: "Cobra", tetris: "Tetris", pac: "Come-Come" };
+const NAMES = { snake: "Cobra", tetris: "Tetris", pac: "Come-Come", brb: "Já voltamos" };
 $("gname").textContent = NAMES[G];
 document.title = "Tavern Break · " + NAMES[G];
+if (G === "brb") document.body.classList.add("brb");   // tela preta "Já voltamos com o RPG"
 
 //LOGIC-START
 // ---------- Cobra ----------
@@ -539,7 +548,7 @@ function showOv(kind, isNew) {
   $("ovgo").focus();
 }
 function start() {
-  if (state === "play") return;
+  if (state === "play" || G === "brb") return;
   if (G === "snake") { S = snakeNew(20); snakePlaceFood(S, rnd); } else if (G === "pac") S = pacNew(); else { S = tNew(); tSpawn(S, rnd); }
   S.startBest = bestV; ckT = 0;
   state = "play"; ov.hidden = true; acc = 0; last = performance.now();

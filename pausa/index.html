@@ -41,6 +41,9 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .rank ol{margin:0;padding:0 0 0 16px;font-size:12px}
 .rank li span{float:right;color:var(--gold)}
 .rank .none{font-size:12px;color:var(--mute)}
+.card.wide{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px}
+.card.wide .e{font-size:22px;display:inline}
+.card.wide b{display:inline;margin:0}
 [hidden]{display:none!important}
 </style></head><body>
 <div class="top"><h1>🍺 Tavern Break</h1><span class="chip" id="chip">Conectando…</span></div>
@@ -50,6 +53,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
   <button class="card" id="c-snake" data-g="snake" aria-pressed="false"><span class="e">🐍</span><b>Cobra</b><small>Deslize o dedo</small><span class="live">● em jogo</span></button>
   <button class="card" id="c-tetris" data-g="tetris" aria-pressed="false"><span class="e">🧱</span><b>Tetris</b><small>Arraste e toque</small><span class="live">● em jogo</span></button>
   <button class="card" id="c-pac" data-g="pac" aria-pressed="false"><span class="e">🟡</span><b>Come-Come</b><small>Deslize o dedo</small><span class="live">● em jogo</span></button>
+  <button class="card wide" id="c-brb" data-g="brb" aria-pressed="false"><span class="e">🎬</span><b>Já voltamos</b><small>Tela preta</small><span class="live">● no ar</span></button>
 </div>
 
 <div id="gm" hidden>
@@ -67,7 +71,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 <script>
 const P = "com.gaduart.pausa/", KS = P + "state", KR = P + "r-", MID = P + "game";
 const $ = id => document.getElementById(id);
-const NAMES = { snake: "Cobra", tetris: "Tetris", pac: "Come-Come" }, GAMES = ["snake", "tetris", "pac"];
+const NAMES = { snake: "Cobra", tetris: "Tetris", pac: "Come-Come", brb: "Já voltamos" }, SCORED = ["snake", "tetris", "pac"], GAMES = [...SCORED, "brb"];
 let OBR = null, role = null, myId = null, sel = "snake", st = { on: false }, board = {}, busy = false, ready = false, status = "Conectando…";
 try { const v = sessionStorage.getItem("tb-sel"); if (GAMES.includes(v)) sel = v; } catch {}
 
@@ -86,21 +90,22 @@ function render() {
   }
   $("gm").hidden = !(gm && OBR);
   $("start").hidden = on;
-  $("start").textContent = "⏸ Pausar a mesa e começar " + NAMES[sel];
+  $("start").textContent = sel === "brb" ? "⏸ Pausar a mesa e mostrar a tela preta" : "⏸ Pausar a mesa e começar " + NAMES[sel];
   $("restart").hidden = !on;
   $("restart").textContent = sel === cur ? "🔄 Reiniciar para todos" : "🔄 Trocar para " + NAMES[sel];
   $("resume").hidden = !on;
   $("hgame").textContent = gm ? "Escolha o jogo" : "Jogos";
   const mine = $("mine");
   mine.hidden = !OBR || (!gm && !on);
-  mine.textContent = gm ? "🎮 Jogar também (só pra mim)" : "🎮 Voltar ao jogo";
+  const isB = (gm ? sel : st.game) === "brb";
+  mine.textContent = gm ? (isB ? "👁 Ver a tela preta (só pra mim)" : "🎮 Jogar também (só pra mim)") : (isB ? "👁 Voltar à tela" : "🎮 Voltar ao jogo");
   if (OBR && !gm) setNote(on ? "O mestre pausou a mesa. Se fechou o jogo, é só voltar por aqui." : "Só o mestre pausa a mesa e escolhe o jogo.");
   renderRank();
 }
 
 function renderRank() {
   const box = $("rank"); box.textContent = "";
-  for (const g of GAMES) {
+  for (const g of SCORED) {
     const d = document.createElement("div");
     const h = document.createElement("h3"); h.textContent = NAMES[g]; d.append(h);
     const rows = Object.values(board).filter(e => e[g] > 0).sort((a, b) => b[g] - a[g]).slice(0, 3);
