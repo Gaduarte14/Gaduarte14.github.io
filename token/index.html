@@ -203,6 +203,10 @@ if(OBR.isAvailable){
         // o Owlbear exige um File novo criado a partir dos bytes
         const file=new File([await blob.arrayBuffer()],name+'.png',{type:'image/png'});
         const upload=buildImageUpload(file).name(name).build();
+        // Centro e tamanho explícitos: sem isso o Owlbear pode assumir o canto da imagem como ponto de origem,
+        // e luzes, auras e anexos do token ficam deslocados pro canto em vez de no centro.
+        const px=+$('size').value;
+        upload.grid={dpi:px,offset:{x:px/2,y:px/2}};
         msg.textContent='Escolha a pasta no seletor do Owlbear.';
         await OBR.assets.uploadImages([upload],'CHARACTER');
         msg.textContent='Token "'+name+'" enviado.';
